@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">華客語詞語對照</title>
+  <desc id="desc">這個詞，客語怎麼說？查教育部六腔辭典、聽官方發音、玩隨機挑戰。</desc>
+  <rect width="1200" height="630" fill="#fff9f1"/>
+  <circle cx="1080" cy="-10" r="260" fill="#fbe1d7"/>
+  <circle cx="112" cy="650" r="190" fill="#e5ecf7"/>
+
+  <g transform="translate(70 58)">
+    <rect width="190" height="62" rx="17" fill="#304a73"/>
+    <text x="95" y="41" fill="#ffffff" font-family="Noto Sans CJK TC,sans-serif" font-size="29" font-weight="800" text-anchor="middle">華 ↔ 客</text>
+    <text x="210" y="41" fill="#1d2939" font-family="Noto Sans CJK TC,sans-serif" font-size="29" font-weight="800">詞語對照</text>
+  </g>
+
+  <g font-family="Noto Sans CJK TC,sans-serif">
+    <text x="70" y="230" fill="#1d2939" font-size="68" font-weight="900">這個詞，</text>
+    <text x="70" y="315" fill="#304a73" font-size="76" font-weight="900">客語怎麼說？</text>
+    <text x="74" y="378" fill="#526174" font-size="26" font-weight="500">六腔查詞・隨機挑戰・錯題學習卡・官方發音</text>
+
+    <g transform="translate(72 434)" fill="#263d60" font-size="21" font-weight="700">
+      <rect width="112" height="43" rx="21.5" fill="#e5ecf7"/>
+      <text x="56" y="29" text-anchor="middle">免登入</text>
+      <rect x="126" width="132" height="43" rx="21.5" fill="#e5ecf7"/>
+      <text x="192" y="29" text-anchor="middle">可離線</text>
+      <rect x="272" width="154" height="43" rx="21.5" fill="#e5ecf7"/>
+      <text x="349" y="29" text-anchor="middle">隨機 10 題</text>
+    </g>
+
+    <text x="74" y="536" fill="#526174" font-size="21">約 23,000 詞目・四縣／海陸／大埔／饒平／詔安／南四縣</text>
+    <text x="74" y="572" fill="#526174" font-size="21">六腔官方發音・本機錯題與學習卡</text>
+  </g>
+
+  <g transform="translate(735 142)" font-family="Noto Sans CJK TC,sans-serif">
+    <rect width="395" height="355" rx="28" fill="#ffffff" stroke="#cfd8e8" stroke-width="3"/>
+    <rect x="28" y="29" width="339" height="66" rx="14" fill="#fff9f1" stroke="#9eacc4" stroke-width="3"/>
+    <text x="51" y="73" fill="#1d2939" font-size="26" font-weight="700">想像</text>
+    <rect x="285" y="40" width="68" height="44" rx="11" fill="#304a73"/>
+    <text x="319" y="70" fill="#ffffff" font-size="20" font-weight="800" text-anchor="middle">查詞</text>
+
+    <text x="31" y="137" fill="#304a73" font-size="17" font-weight="800" letter-spacing="2">四縣腔</text>
+    <text x="31" y="187" fill="#1d2939" font-size="39" font-weight="900">想像</text>
+    <line x1="31" y1="213" x2="364" y2="213" stroke="#cfd8e8" stroke-width="2"/>
+    <text x="31" y="263" fill="#1d2939" font-size="29" font-weight="900">xiong31 xiong55</text>
+    <text x="31" y="307" fill="#526174" font-size="20">假想；構想具體形象</text>
+    <rect x="243" y="275" width="121" height="54" rx="14" fill="#e5ecf7" stroke="#cfd8e8" stroke-width="2"/>
+    <polygon points="264,292 264,312 280,302" fill="#304a73"/>
+    <text x="291" y="310" fill="#263d60" font-size="20" font-weight="800">聽客語</text>
+  </g>
+
+  <path d="M1089 529c15-17 15-45 0-62M1110 548c27-28 27-75 0-103" fill="none" stroke="#df6c4f" stroke-width="11" stroke-linecap="round"/>
+  <circle cx="1064" cy="498" r="15" fill="#df6c4f"/>
+</svg>

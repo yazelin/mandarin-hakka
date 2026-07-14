@@ -1,0 +1,11 @@
+{
+  "name": "mandarin-hakka",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "離線優先的華語／臺灣客語六腔辭典與學習工具",
+  "scripts": {
+    "test": "node --test",
+    "serve": "python3 -m http.server 4173"
+  }
+}

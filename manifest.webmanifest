@@ -1,0 +1,36 @@
+{
+  "name": "華語客語詞典",
+  "short_name": "華客詞典",
+  "description": "教育部臺灣客語辭典六腔查詢、官方發音、隨機挑戰、錯題本及學習卡",
+  "id": "./",
+  "lang": "zh-Hant-TW",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#fffaf3",
+  "theme_color": "#6b3f22",
+  "categories": ["education", "reference", "games"],
+  "shortcuts": [
+    {
+      "name": "客語隨機挑戰",
+      "short_name": "挑戰",
+      "description": "隨機十題客語發音四選一",
+      "url": "./#challenge",
+      "icons": [{ "src": "./assets/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "錯題本",
+      "short_name": "錯題",
+      "description": "複習這台裝置上的客語錯題",
+      "url": "./#wrongbook",
+      "icons": [{ "src": "./assets/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ],
+  "icons": [
+    { "src": "./assets/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "./assets/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./assets/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

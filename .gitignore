@@ -1,0 +1,14 @@
+node_modules/
+__pycache__/
+*.py[cod]
+.DS_Store
+*.log
+
+# Official source workbooks are downloaded locally and converted by the builder.
+sources/
+*.ods
+
+# Local browser artifacts.
+playwright-report/
+test-results/
+.screenshots/

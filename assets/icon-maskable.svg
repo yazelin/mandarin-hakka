@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">華客語詞語對照</title>
+  <rect width="512" height="512" fill="#304a73"/>
+  <rect x="78" y="78" width="356" height="356" rx="78" fill="#fff9f1"/>
+  <path d="M78 156h356v88H78z" fill="#df6c4f"/>
+  <text x="256" y="218" fill="#fff9f1" font-family="Noto Sans CJK TC,system-ui,sans-serif" font-size="60" font-weight="800" text-anchor="middle">華 ↔ 客</text>
+  <text x="256" y="354" fill="#304a73" font-family="Noto Sans CJK TC,system-ui,sans-serif" font-size="82" font-weight="800" text-anchor="middle">詞</text>
+  <g fill="#df6c4f" transform="translate(352 337)">
+    <circle r="11"/>
+    <circle cx="-18" cy="-11" r="11"/>
+    <circle cx="18" cy="-11" r="11"/>
+    <circle cx="-12" cy="18" r="11"/>
+    <circle cx="12" cy="18" r="11"/>
+  </g>
+</svg>

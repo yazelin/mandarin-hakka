@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#6b3f22" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <meta name="application-name" content="華語客語詞典" />
+    <meta
+      name="description"
+      content="用華語全文、客語漢字或拼音搜尋教育部臺灣客語辭典，對照六腔拼音、釋義、例句與官方發音，並可用四選一挑戰學客語。"
+    />
+    <title>華語客語詞典｜六腔查詢、官方發音與隨機挑戰</title>
+    <link rel="canonical" href="https://yazelin.github.io/mandarin-hakka/" />
+    <link rel="sitemap" type="application/xml" href="./sitemap.xml" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="zh_TW" />
+    <meta property="og:site_name" content="華語客語詞典" />
+    <meta property="og:title" content="華語客語詞典｜這句客語是什麼意思？" />
+    <meta property="og:description" content="查六腔客語漢字、拼音、華語釋義與教育部官方發音，也能玩十題四選一挑戰。" />
+    <meta property="og:url" content="https://yazelin.github.io/mandarin-hakka/" />
+    <meta property="og:image" content="https://yazelin.github.io/mandarin-hakka/assets/og-image.png" />
+    <meta property="og:image:secure_url" content="https://yazelin.github.io/mandarin-hakka/assets/og-image.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="華語客語詞典：六腔查詢、官方發音與隨機挑戰" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="華語客語詞典｜六腔查詢與隨機挑戰" />
+    <meta name="twitter:description" content="教育部臺灣客語辭典資料；免登入、可安裝、文字詞庫可離線查。" />
+    <meta name="twitter:image" content="https://yazelin.github.io/mandarin-hakka/assets/og-image.png" />
+    <meta name="twitter:image:alt" content="華語客語詞典：六腔查詢、官方發音與隨機挑戰" />
+    <link rel="manifest" href="./manifest.webmanifest?v=1" />
+    <link rel="icon" href="./assets/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./assets/apple-touch-icon.png" />
+    <link rel="stylesheet" href="./styles.css?v=1" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "華語客語詞典",
+        "url": "https://yazelin.github.io/mandarin-hakka/",
+        "description": "用華語全文、客語漢字或拼音查教育部臺灣客語辭典六腔資料。",
+        "applicationCategory": "ReferenceApplication",
+        "operatingSystem": "Any",
+        "inLanguage": ["zh-Hant-TW", "hak-Latn"],
+        "isAccessibleForFree": true
+      }
+    </script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">跳到主要內容</a>
+
+    <header class="site-header">
+      <a class="brand" href="#dictionary" title="回到查詞首頁">
+        <span class="brand__mark" aria-hidden="true">華 ↔ 客</span>
+        <span>華語客語詞典</span>
+      </a>
+      <nav class="site-nav" aria-label="主要功能">
+        <a class="site-nav__link" href="#dictionary" data-app-view="dictionary">查詞</a>
+        <a class="site-nav__link" href="#challenge" data-app-view="challenge">隨機挑戰</a>
+        <a class="site-nav__link" href="#wrongbook" data-app-view="wrongbook">錯題本</a>
+        <a class="site-nav__link" href="#flashcards" data-app-view="flashcards">學習卡</a>
+      </nav>
+      <div class="header-actions">
+        <button id="install-app" class="header-install" type="button" hidden>安裝 App</button>
+        <a class="header-link" href="#about" data-app-view="about">資料說明</a>
+      </div>
+    </header>
+
+    <main id="main">
+      <section id="dictionary" class="hero dictionary-view" aria-labelledby="page-title">
+        <div class="hero__copy">
+          <p class="kicker">教育部六腔資料・免登入</p>
+          <h1 id="page-title">這個詞，<br /><span>客語怎麼講？</span></h1>
+          <p class="hero__intro">查華語意思、客語漢字或拼音，一次看四縣、海陸、大埔、饒平、詔安與南四縣的拼音、釋義、例句及官方發音。</p>
+        </div>
+
+        <div class="search-panel">
+          <form id="search-form" class="search-form" role="search">
+            <label for="query">輸入華語、客語漢字或拼音</label>
+            <div class="search-form__row">
+              <input id="query" name="q" type="search" placeholder="例如：想像、醫院、ngi ien" autocomplete="off" enterkeyhint="search" disabled />
+              <button id="search-submit" class="button button--primary" type="submit" disabled>查詞</button>
+            </div>
+            <div class="filter-row">
+              <label for="accent">腔調</label>
+              <select id="accent" disabled>
+                <option value="">全部六腔</option>
+              </select>
+            </div>
+          </form>
+          <div id="suggestions" class="suggestions" aria-label="詞目範例">
+            <span>試著查：</span>
+            <span id="suggestion-list" class="suggestion-list" aria-live="polite"></span>
+            <button id="shuffle-suggestions" class="suggestions__shuffle" type="button" disabled>換一批</button>
+          </div>
+          <p id="search-status" class="search-status" role="status" aria-live="polite">正在載入官方詞庫…</p>
+        </div>
+      </section>
+
+      <section id="results" class="results dictionary-view" aria-label="查詢結果" tabindex="-1"></section>
+
+      <section class="stats dictionary-view" aria-label="詞庫統計">
+        <div><strong id="term-count">—</strong><span>客語詞目</span></div>
+        <div><strong id="variant-count">—</strong><span>六腔資料</span></div>
+        <div><strong id="audio-count">—</strong><span>官方發音</span></div>
+        <div><strong id="quiz-count">—</strong><span>可挑戰題目</span></div>
+      </section>
+
+      <section class="offline-card dictionary-view" aria-labelledby="offline-title">
+        <div>
+          <p class="eyebrow">安裝與離線</p>
+          <h2 id="offline-title">詞庫可離線，語音按需保存</h2>
+          <p>第一次開啟後，網站與文字詞庫會留在這台裝置。瀏覽器會嘗試暫存播放過的遠端官方發音，但不保證離線可用。</p>
+          <p>選定一種腔調後，可另存該腔 360 題學習音檔，方便沒有網路時練習；按鈕會顯示精確檔數與容量。完整辭典語音量很大，因此不會一次下載。</p>
+          <p class="fine-print">查詢與學習紀錄只存在這台裝置。清除瀏覽器網站資料時，離線內容也會一併移除。</p>
+        </div>
+        <div class="offline-card__action">
+          <button id="download-accent-audio" class="button button--primary" type="button" disabled>請先選擇一種腔調</button>
+          <div class="offline-card__controls">
+            <button id="cancel-audio-download" class="text-button" type="button" hidden>取消下載</button>
+            <button id="clear-offline-audio" class="text-button" type="button" hidden>清除離線語音</button>
+          </div>
+          <p id="offline-status" role="status" aria-live="polite">詞庫載入後即可選擇腔調下載學習語音。</p>
+        </div>
+      </section>
+
+      <section id="about" class="about dictionary-view" aria-labelledby="about-title" tabindex="-1">
+        <div>
+          <p class="eyebrow">資料說明</p>
+          <h2 id="about-title">忠實呈現官方六腔資料</h2>
+        </div>
+        <div class="about__grid">
+          <article><h3>華語全文也能查</h3><p>除了客語詞目與拼音，本站也會搜尋華語釋義及例句譯文；找到的是原始詞條，不是機器翻譯。</p></article>
+          <article><h3>六腔不混在一起</h3><p>每筆結果保留官方腔調、拼音、釋義、例句及錄音。可用腔調選單只看指定腔別。</p></article>
+          <article><h3>挑戰答案來自釋義</h3><p>四選一題目只採用有官方發音、且華語答案明確不重複的資料；每局隨機十題且題目不重複。</p></article>
+          <article><h3>離線範圍透明</h3><p>文字詞庫可離線，也可依腔調下載每腔 360 題學習語音。其餘遠端官方發音仍需連網，不承諾離線播放。</p></article>
+        </div>
+      </section>
+
+      <section id="learning-view" class="learning-view" aria-label="客語學習" tabindex="-1" hidden></section>
+    </main>
+
+    <footer class="site-footer">
+      <p>
+        客語文字與發音來源：中華民國教育部
+        <a href="https://hakkadict.moe.edu.tw/" target="_blank" rel="noreferrer">《臺灣客語辭典》</a>，涵蓋四縣、海陸、大埔、饒平、詔安及南四縣。
+        資料依 <a href="https://creativecommons.org/licenses/by-nd/3.0/tw/deed.zh-hant" target="_blank" rel="noreferrer">CC BY-ND 3.0 TW</a> 授權使用；本站未改寫官方詞義，也未改作錄音，且不是教育部官方服務。
+      </p>
+      <p>資料日期：<span id="source-date">載入中</span>。</p>
+      <p><a href="https://github.com/yazelin/mandarin-hakka" target="_blank" rel="noreferrer">GitHub 原始碼</a> ・ <a href="https://www.facebook.com/yaze.lin.gm" target="_blank" rel="noreferrer">Facebook</a> ・ <a href="https://buymeacoffee.com/yazelin" target="_blank" rel="noreferrer">請作者喝杯咖啡</a></p>
+    </footer>
+
+    <aside id="audio-dock" class="audio-dock" aria-label="發音播放控制" hidden>
+      <div><strong id="audio-title">客語發音</strong><span id="audio-source">教育部官方音檔</span></div>
+      <audio id="audio-player" controls preload="none"></audio>
+      <button id="stop-audio" class="button button--secondary" type="button">關閉</button>
+    </aside>
+
+    <noscript><p class="noscript">這個查詢工具需要啟用 JavaScript。</p></noscript>
+    <script type="module" src="./app.js?v=1"></script>
+  </body>
+</html>
