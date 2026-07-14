@@ -167,6 +167,17 @@ main,
   margin-inline: auto;
 }
 
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .hero {
   display: grid;
   grid-template-columns: minmax(0, 0.88fr) minmax(360px, 1.12fr);
@@ -343,6 +354,55 @@ select:disabled {
 
 .search-status[data-kind="success"] {
   color: var(--leaf);
+}
+
+.text-data-status {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.55rem 0.8rem;
+  align-items: center;
+  margin-top: 0.9rem;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid #d8c4b0;
+  border-radius: 0.85rem;
+  background: #fff8ef;
+}
+
+.text-data-status__copy {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.text-data-status__copy span {
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.4;
+}
+
+.text-data-status progress {
+  grid-column: 1 / -1;
+  width: 100%;
+  height: 0.55rem;
+  accent-color: var(--leaf);
+}
+
+.text-data-status[data-kind="ready"] {
+  border-color: #9fc9b8;
+  background: var(--mint);
+}
+
+.text-data-status[data-kind="error"] {
+  border-color: #e1aaa4;
+  background: #fff0ed;
+}
+
+.text-data-status[data-kind="error"] strong {
+  color: var(--danger);
+}
+
+.text-data-status[data-kind="ready"] progress,
+.text-data-status[data-kind="error"] progress {
+  display: none;
 }
 
 .stats {

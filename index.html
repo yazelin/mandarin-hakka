@@ -30,10 +30,10 @@
     <meta name="twitter:description" content="教育部臺灣客語辭典資料；免登入、可安裝、文字詞庫可離線查。" />
     <meta name="twitter:image" content="https://yazelin.github.io/mandarin-hakka/assets/og-image.png" />
     <meta name="twitter:image:alt" content="華語客語詞典：六腔查詢、官方發音與隨機挑戰" />
-    <link rel="manifest" href="./manifest.webmanifest?v=2" />
+    <link rel="manifest" href="./manifest.webmanifest?v=3" />
     <link rel="icon" href="./assets/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./assets/apple-touch-icon.png" />
-    <link rel="stylesheet" href="./styles.css?v=2" />
+    <link rel="stylesheet" href="./styles.css?v=3" />
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -69,6 +69,15 @@
     </header>
 
     <main id="main">
+      <aside id="text-data-status" class="text-data-status" data-kind="loading">
+        <div class="text-data-status__copy">
+          <strong id="text-data-title">正在下載基本查詞資料…</strong>
+          <span id="text-data-detail">完成後可先查詞，其餘完整內容會繼續在背景下載。</span>
+        </div>
+        <progress id="text-data-progress" max="100" aria-label="完整文字詞庫下載進度" aria-describedby="text-data-detail"></progress>
+        <button id="retry-text-data" class="text-button" type="button" hidden>重試下載完整內容</button>
+      </aside>
+      <p id="text-data-announcement" class="visually-hidden" role="status" aria-live="polite"></p>
       <section id="dictionary" class="hero dictionary-view" aria-labelledby="page-title">
         <div class="hero__copy">
           <p class="kicker">教育部六腔資料・免登入</p>
@@ -112,7 +121,7 @@
         <div>
           <p class="eyebrow">安裝與離線</p>
           <h2 id="offline-title">詞庫可離線，語音按需保存</h2>
-          <p>第一次開啟後，網站與文字詞庫會留在這台裝置。瀏覽器會嘗試暫存播放過的遠端官方發音，但不保證離線可用。</p>
+          <p>基本查詞資料會先載入；詞目、六腔拼音與華語釋義可用後，例句、同反義詞及官方發音的播放資料仍會在背景下載。畫面會顯示進度，完整文字資料保存完成後才會標示可完整離線。</p>
           <p>選定一種腔調後，可另存該腔 360 題學習音檔，方便沒有網路時練習；按鈕會顯示精確檔數與容量。完整辭典語音量很大，因此不會一次下載。</p>
           <p class="fine-print">查詢與學習紀錄只存在這台裝置。清除瀏覽器網站資料時，離線內容也會一併移除。</p>
         </div>
@@ -159,6 +168,6 @@
     </aside>
 
     <noscript><p class="noscript">這個查詢工具需要啟用 JavaScript。</p></noscript>
-    <script type="module" src="./app.js?v=2"></script>
+    <script type="module" src="./app.js?v=3"></script>
   </body>
 </html>

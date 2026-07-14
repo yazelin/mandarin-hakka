@@ -9,6 +9,7 @@ import {
   pickSuggestionTerms,
   searchEntriesDetailed,
 } from "../search.js";
+import { expandCoreDictionary, mergeDictionaryDetails } from "../dictionary-data.js";
 
 const dictionary = {
   metadata: { accents: ["四縣", "海陸"] },
@@ -86,8 +87,9 @@ test("lists metadata accents and produces unique suggestions", () => {
 });
 
 test("real dictionary finds tone-free and tone-number Hakka pronunciation", async () => {
-  const dataUrl = new URL("../data/dictionary.json", import.meta.url);
-  const realDictionary = JSON.parse(await readFile(dataUrl, "utf8"));
+  const coreUrl = new URL("../data/dictionary-core.json", import.meta.url);
+  const detailsUrl = new URL("../data/dictionary-details.json", import.meta.url);
+  const realDictionary = expandCoreDictionary(JSON.parse(await readFile(coreUrl, "utf8")));
   const index = createSearchIndex(realDictionary);
   for (const query of ["xiong xiong", "xiong31 xiong55"]) {
     const results = searchEntriesDetailed(index, query, { accent: "四縣", limit: 20 }).results;
@@ -98,4 +100,12 @@ test("real dictionary finds tone-free and tone-number Hakka pronunciation", asyn
     limit: 20,
   }).results;
   assert.ok(placeholderResults.some(({ entry }) => entry.headword === "議員"));
+
+  const imagination = realDictionary.entries.find((entry) => entry.headword === "想像");
+  assert.ok(searchEntriesDetailed(index, "假想", { limit: 20 }).results.some(({ entry }) => entry === imagination));
+  mergeDictionaryDetails(realDictionary, JSON.parse(await readFile(detailsUrl, "utf8")));
+  const fullIndex = createSearchIndex(realDictionary);
+  const examplePhrase = imagination.variants.find((variant) => variant.example)?.example.slice(0, 8);
+  assert.ok(examplePhrase);
+  assert.ok(searchEntriesDetailed(fullIndex, examplePhrase, { limit: 40 }).results.some(({ entry }) => entry === imagination));
 });

@@ -12,6 +12,7 @@ from scripts.build_hakka_dictionary import (
     first_quiz_sentence,
     normalize_whitespace,
     select_quiz_audio,
+    split_web_dictionary,
 )
 
 
@@ -189,6 +190,90 @@ class BuildHakkaDictionaryTests(unittest.TestCase):
             self.assertEqual(dictionary["metadata"]["row_count"], 30)
             self.assertEqual(dictionary["metadata"]["headword_count"], 3)
 
+            core, details = split_web_dictionary(dictionary)
+            self.assertEqual(core["metadata"]["web_data"]["schema_version"], 2)
+            self.assertEqual(core["metadata"]["web_data"]["revision"], details["revision"])
+            imagination_index = next(
+                index for index, row in enumerate(core["entries"]) if row[0] == "想像"
+            )
+            core_imagination = core["entries"][imagination_index]
+            self.assertEqual(core_imagination[1], "假想。")
+            self.assertEqual(
+                core["definitions"][core_imagination[2][0][2]],
+                imagination[0]["variants"][0]["definition"],
+            )
+            detail_row = details["entries"][imagination_index][0]
+            self.assertEqual(
+                details["parts_of_speech"][detail_row[0]],
+                imagination[0]["variants"][0]["part_of_speech"],
+            )
+            self.assertEqual(
+                details["examples"][detail_row[2]],
+                imagination[0]["variants"][0]["example"],
+            )
+            audio_value = detail_row[6]
+            filenames = audio_value if isinstance(audio_value, list) else [audio_value]
+            self.assertEqual(filenames, ["hk0000014108-1-1.mp3"])
+
+    def test_web_split_preserves_every_official_user_facing_field(self):
+        variant = {
+            "accent": "四縣",
+            "sequence": 7,
+            "part_of_speech": "動",
+            "pronunciation": "ngi55 ien55",
+            "location": "北四縣",
+            "definition": "測試釋義。",
+            "example": "測試例句。(華語譯文。)",
+            "synonyms": "相似詞",
+            "antonyms": "相反詞",
+            "categories": ["分類甲", "分類乙"],
+            "audio": [
+                "https://hakkadict.moe.edu.tw/static/audio/hk0000000007-1-1.mp3",
+                "https://hakkadict.moe.edu.tw/static/audio/hk0000000007-2-1.mp3",
+            ],
+            "quiz_audio": "../assets/hakka-audio/sixian/hk0000000007-1-1.mp3",
+        }
+        dictionary = {
+            "metadata": {
+                "source_date": "2026-07-14",
+                "row_count": 1,
+                "entry_count": 1,
+                "headword_count": 1,
+                "audio_count": 2,
+                "accents": list(ACCENTS),
+            },
+            "entries": [
+                {
+                    "id": "build-only-id",
+                    "headword": "測試",
+                    "quiz_answer": "測驗。",
+                    "variants": [variant],
+                }
+            ],
+        }
+        core, details = split_web_dictionary(dictionary)
+        core_entry = core["entries"][0]
+        core_variant = core_entry[2][0]
+        detail = details["entries"][0][0]
+        self.assertEqual(core_entry[:2], ["測試", "測驗。"])
+        self.assertEqual(core["metadata"]["accents"][core_variant[0]], "四縣")
+        self.assertEqual(core_variant[1], variant["pronunciation"])
+        self.assertEqual(core["definitions"][core_variant[2]], variant["definition"])
+        self.assertEqual(core_variant[3], variant["quiz_audio"])
+        self.assertEqual(details["parts_of_speech"][detail[0]], variant["part_of_speech"])
+        self.assertEqual(details["locations"][detail[1]], variant["location"])
+        self.assertEqual(details["examples"][detail[2]], variant["example"])
+        self.assertEqual(details["synonyms"][detail[3]], variant["synonyms"])
+        self.assertEqual(details["antonyms"][detail[4]], variant["antonyms"])
+        self.assertEqual(
+            [details["categories"][index] for index in detail[5]],
+            variant["categories"],
+        )
+        self.assertEqual(
+            detail[6],
+            ["hk0000000007-1-1.mp3", "hk0000000007-2-1.mp3"],
+        )
+
     def test_quiz_pack_selection_and_cached_bytes_are_deterministic(self):
         entries = []
         for index in range(5):
@@ -221,7 +306,7 @@ class BuildHakkaDictionaryTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            output = root / "data" / "dictionary.json"
+            output = root / "data" / "dictionary-core.json"
             audio_root = root / "assets" / "hakka-audio"
             for accent, items in first.items():
                 folder = audio_root / ACCENT_KEYS[accent]

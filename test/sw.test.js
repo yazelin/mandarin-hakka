@@ -8,7 +8,8 @@ import vm from "node:vm";
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const workerSource = readFileSync(resolve(repositoryRoot, "sw.js"), "utf8");
 const scope = "https://example.test/mandarin-hakka/";
-const shellCache = "mandarin-hakka-shell-v2";
+const shellCache = "mandarin-hakka-shell-v3";
+const dataCache = "mandarin-hakka-data-v3";
 const audioCache = "mandarin-hakka-audio-v1";
 const officialAudio = "https://hakkadict.moe.edu.tw/static/audio/hk0000014108-1-1.mp3";
 
@@ -177,7 +178,7 @@ function createWorker(fetchImplementation, { openFails = false, putFails = false
   };
 }
 
-test("document, modules, and complete dictionary stay on one immutable v2 shell", async (t) => {
+test("the v3 app shell and validated dictionary cache stay separate", async (t) => {
   const indexUrl = `${scope}index.html`;
 
   await t.test("app navigation uses the installed document", async () => {
@@ -191,16 +192,26 @@ test("document, modules, and complete dictionary stay on one immutable v2 shell"
     assert.equal(worker.fetchCalls.length, 0);
   });
 
-  await t.test("dictionary is served from the matching installed release", async () => {
-    const dataUrl = `${scope}data/dictionary.json?v=2`;
-    const worker = createWorker(async () => new Response('{"version":2}'));
-    worker.seed(shellCache, dataUrl, '{"version":1}', {
+  await t.test("validated dictionary data is served cache-first", async () => {
+    const dataUrl = `${scope}data/dictionary-core.json?v=3`;
+    const worker = createWorker(async () => new Response('{"version":3}'));
+    worker.seed(dataCache, dataUrl, '{"version":3,"validated":true}', {
       headers: { "content-type": "application/json" },
     });
 
     const { response } = await worker.dispatchFetch(dataUrl);
-    assert.equal(await response.text(), '{"version":1}');
+    assert.equal(await response.text(), '{"version":3,"validated":true}');
     assert.equal(worker.fetchCalls.length, 0);
+  });
+
+  await t.test("uncached data is not persisted before app validation", async () => {
+    const dataUrl = `${scope}data/dictionary-details.json?v=3`;
+    const worker = createWorker(async () =>
+      new Response('{"unvalidated":true}', { headers: { "content-type": "application/json" } }),
+    );
+    const { response } = await worker.dispatchFetch(dataUrl);
+    assert.equal(await response.text(), '{"unvalidated":true}');
+    assert.equal(worker.cached(dataCache, dataUrl), undefined);
   });
 
   await t.test("other navigation paths never receive the app fallback", async () => {
@@ -213,25 +224,24 @@ test("document, modules, and complete dictionary stay on one immutable v2 shell"
   });
 });
 
-test("install reuses immutable v2 HTTP responses instead of redownloading the dictionary", async () => {
+test("install caches only the v3 app shell and never downloads dictionary payloads", async () => {
   const worker = createWorker(async (request) => {
     const url = new URL(request.url);
     if (url.pathname.endsWith("/") || url.pathname.endsWith("index.html")) {
       return new Response("<!doctype html>", { headers: { "content-type": "text/html" } });
-    }
-    if (url.pathname.endsWith("dictionary.json")) {
-      return new Response('{"entries":[]}', { headers: { "content-type": "application/json" } });
     }
     return new Response("asset", { headers: { "content-type": "application/octet-stream" } });
   });
 
   await worker.dispatchInstall();
 
-  const dictionaryCall = worker.fetchCalls.find(([request]) => request.url.includes("dictionary.json"));
   const rootCall = worker.fetchCalls.find(([request]) => new URL(request.url).pathname.endsWith("mandarin-hakka/"));
-  assert.equal(dictionaryCall[0].cache, "force-cache");
   assert.equal(rootCall[0].cache, "reload");
-  assert.ok(worker.cached(shellCache, `${scope}data/dictionary.json?v=2`));
+  assert.equal(
+    worker.fetchCalls.some(([request]) => /\/data\/dictionary-(?:core|details)\.json/.test(request.url)),
+    false,
+  );
+  assert.ok(worker.cached(shellCache, `${scope}app.js?v=3`));
 });
 
 test("official opaque audio is cached after playback and served offline", async () => {
@@ -441,7 +451,7 @@ test("an in-progress learning-pack download can be cancelled without a false com
 test("clear message removes only the Hakka audio cache", async () => {
   const worker = createWorker(async () => new Response("unused"));
   worker.seed(audioCache, `${scope}assets/hakka-audio/dapu/a.mp3`, "audio");
-  worker.seed(shellCache, `${scope}app.js?v=2`, "app");
+  worker.seed(shellCache, `${scope}app.js?v=3`, "app");
 
   const replies = await worker.dispatchMessage({ type: "CLEAR_HAKKA_AUDIO" }, { usePort: true });
   assert.equal(replies.at(-1).type, "HAKKA_AUDIO_CLEARED");
@@ -459,7 +469,8 @@ test("other cross-origin requests remain outside this worker", async () => {
 test("activation removes only obsolete mandarin-hakka caches", async () => {
   const worker = createWorker(async () => new Response("unused"));
   worker.seed("mandarin-hakka-shell-v0", `${scope}old.js`, "old");
-  worker.seed(shellCache, `${scope}app.js?v=2`, "current");
+  worker.seed(shellCache, `${scope}app.js?v=3`, "current");
+  worker.seed(dataCache, `${scope}data/dictionary-core.json?v=3`, "current data");
   worker.seed("mandarin-hakka-audio-v0", officialAudio, new OpaqueResponse());
   worker.seed(audioCache, `${scope}assets/hakka-audio/zhaoan/a.mp3`, "current audio");
   worker.seed("mandarin-taigi-shell-v11", `${scope}unrelated`, "other app");
@@ -468,28 +479,29 @@ test("activation removes only obsolete mandarin-hakka caches", async () => {
 
   assert.deepEqual(
     [...worker.stores.keys()].sort(),
-    ["mandarin-taigi-shell-v11", audioCache, shellCache].sort(),
+    ["mandarin-taigi-shell-v11", audioCache, dataCache, shellCache].sort(),
   );
   assert.equal(worker.clientsClaimed, true);
 });
 
-test("worker reports v2 release/cache and has no eager lifecycle takeover", async () => {
+test("worker reports the v3 release and separate data cache without eager takeover", async () => {
   const worker = createWorker(async () => new Response("unused"));
   const replies = await worker.dispatchMessage({ type: "GET_RELEASE" }, { usePort: true });
-  assert.deepEqual(JSON.parse(JSON.stringify(replies)), [{ release: "2", audioCache }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(replies)), [{ release: "3", audioCache, dataCache }]);
   assert.doesNotMatch(workerSource, /skipWaiting\s*\(/);
   assert.doesNotMatch(workerSource, /location\.reload\s*\(/);
 });
 
-test("all required v2 modules and the complete dictionary are install-shell members", () => {
+test("all v3 modules but no dictionary payloads are install-shell members", () => {
   for (const path of [
     "app.js",
     "search.js",
     "quiz.js",
     "learning.js",
     "offline.js",
-    "data/dictionary.json",
+    "dictionary-data.js",
   ]) {
-    assert.match(workerSource, new RegExp(`"\\.\\/${path.replaceAll(".", "\\.")}\\?v=2"`), path);
+    assert.match(workerSource, new RegExp(`"\\.\\/${path.replaceAll(".", "\\.")}\\?v=3"`), path);
   }
+  assert.doesNotMatch(workerSource, /"\.\/data\/dictionary-(?:core|details)\.json/);
 });

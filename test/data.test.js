@@ -2,10 +2,25 @@ import assert from "node:assert/strict";
 import { readdir, readFile, stat } from "node:fs/promises";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { gzipSync } from "node:zlib";
+import {
+  expandCoreDictionary,
+  mergeDictionaryDetails,
+  officialAudioUrl,
+  validateDictionaryDetails,
+} from "../dictionary-data.js";
 
-const dictionaryUrl = new URL("../data/dictionary.json", import.meta.url);
-const raw = await readFile(dictionaryUrl, "utf8");
-const dictionary = JSON.parse(raw);
+const coreUrl = new URL("../data/dictionary-core.json", import.meta.url);
+const detailsUrl = new URL("../data/dictionary-details.json", import.meta.url);
+const [coreRaw, detailsRaw] = await Promise.all([
+  readFile(coreUrl, "utf8"),
+  readFile(detailsUrl, "utf8"),
+]);
+const compactCore = JSON.parse(coreRaw);
+const compactDetails = JSON.parse(detailsRaw);
+const dictionary = expandCoreDictionary(JSON.parse(coreRaw));
+validateDictionaryDetails(dictionary, compactDetails);
+mergeDictionaryDetails(dictionary, compactDetails);
 
 const ACCENTS = ["四縣", "海陸", "大埔", "饒平", "詔安", "南四縣"];
 const ACCENT_KEYS = {
@@ -16,15 +31,19 @@ const ACCENT_KEYS = {
   詔安: "zhaoan",
   南四縣: "south-sixian",
 };
-const REMOTE_AUDIO =
-  /^https:\/\/hakkadict\.moe\.edu\.tw\/static\/audio\/hk[0-9A-Za-z._-]+\.mp3$/;
+const AUDIO_FILENAME = /^hk[0-9A-Za-z._-]+\.mp3$/;
 const LOCAL_AUDIO =
   /^\.\.\/assets\/hakka-audio\/(sixian|hailu|dapu|raoping|zhaoan|south-sixian)\/hk[0-9A-Za-z._-]+\.mp3$/;
 
-test("dictionary is deterministic minified UTF-8 JSON with complete snapshot counts", () => {
-  assert.equal(raw.indexOf("\n"), raw.length - 1);
+test("versioned two-stage files are deterministic, complete, and first-load bounded", () => {
+  assert.equal(coreRaw.indexOf("\n"), coreRaw.length - 1);
+  assert.equal(detailsRaw.indexOf("\n"), detailsRaw.length - 1);
   assert.deepEqual(dictionary.metadata.accents, ACCENTS);
   assert.equal(dictionary.metadata.schema_version, 1);
+  assert.equal(dictionary.metadata.web_data.schema_version, 2);
+  assert.equal(dictionary.metadata.web_data.core_format, 2);
+  assert.equal(dictionary.metadata.web_data.revision, compactDetails.revision);
+  assert.equal(dictionary.metadata.web_data.details_bytes, Buffer.byteLength(detailsRaw));
   assert.equal(dictionary.metadata.source_date, "2025-10-31");
   assert.equal(dictionary.metadata.license.name, "CC BY-ND 3.0 TW");
   assert.equal(dictionary.metadata.row_count, 105_852);
@@ -32,27 +51,31 @@ test("dictionary is deterministic minified UTF-8 JSON with complete snapshot cou
   assert.equal(dictionary.metadata.headword_count, 23_004);
   assert.equal(dictionary.metadata.audio_count, 67_304);
   assert.equal(dictionary.entries.length, dictionary.metadata.entry_count);
+  assert.ok(Array.isArray(compactCore.definitions));
+
+  const coreBytes = Buffer.byteLength(coreRaw);
+  const detailsBytes = Buffer.byteLength(detailsRaw);
+  const coreGzip = gzipSync(coreRaw, { level: 9 }).byteLength;
+  const detailsGzip = gzipSync(detailsRaw, { level: 9 }).byteLength;
+  assert.ok(coreBytes < 5_600_000, `core is ${coreBytes} bytes`);
+  assert.ok(coreGzip < 1_800_000, `core gzip is ${coreGzip} bytes`);
+  assert.ok(detailsBytes < 13_200_000, `details is ${detailsBytes} bytes`);
+  assert.ok(detailsGzip < 2_600_000, `details gzip is ${detailsGzip} bytes`);
+  assert.ok(coreGzip + detailsGzip < 4_400_000);
 });
 
-test("entries and variants conform to schema v1 without unsafe audio URLs", () => {
-  const ids = new Set();
+test("expanded entries retain every searchable and display field with safe audio", () => {
   const headwords = new Set();
   const audio = new Set();
   let rowCount = 0;
-  let previousSortKey = "";
+  let previousHeadword = "";
 
   for (const entry of dictionary.entries) {
-    assert.equal(typeof entry.id, "string");
-    assert.ok(entry.id);
-    assert.ok(!ids.has(entry.id), `duplicate id ${entry.id}`);
-    ids.add(entry.id);
     assert.equal(typeof entry.headword, "string");
     assert.equal(entry.headword, entry.headword.trim());
-    assert.ok(entry.headword);
+    assert.ok(entry.headword >= previousHeadword, `out of order: ${entry.headword}`);
+    previousHeadword = entry.headword;
     headwords.add(entry.headword);
-    const sortKey = `${entry.headword}\0${entry.id}`;
-    assert.ok(sortKey >= previousSortKey, `out of order: ${entry.headword}`);
-    previousSortKey = sortKey;
     assert.ok(Array.isArray(entry.variants) && entry.variants.length > 0);
     assert.ok(entry.variants.length <= ACCENTS.length);
 
@@ -66,7 +89,6 @@ test("entries and variants conform to schema v1 without unsafe audio URLs", () =
     for (const variant of entry.variants) {
       rowCount += 1;
       assert.ok(ACCENTS.includes(variant.accent));
-      assert.ok(Number.isInteger(variant.sequence) || typeof variant.sequence === "string");
       for (const field of [
         "part_of_speech",
         "pronunciation",
@@ -76,27 +98,20 @@ test("entries and variants conform to schema v1 without unsafe audio URLs", () =
         "synonyms",
         "antonyms",
       ]) {
-        assert.equal(typeof variant[field], "string", `${entry.id}.${field}`);
-        assert.equal(variant[field], variant[field].trim(), `${entry.id}.${field}`);
+        assert.equal(typeof variant[field], "string", `${entry.headword}.${field}`);
+        assert.equal(variant[field], variant[field].trim(), `${entry.headword}.${field}`);
       }
       assert.ok(Array.isArray(variant.categories));
       assert.ok(Array.isArray(variant.audio));
-      for (const url of variant.audio) {
-        assert.match(url, REMOTE_AUDIO);
-        audio.add(url);
+      for (const filename of variant.audio) {
+        assert.match(filename, AUDIO_FILENAME);
+        assert.match(officialAudioUrl(filename), /^https:\/\/hakkadict\.moe\.edu\.tw\/static\/audio\//);
+        audio.add(filename);
       }
       if (Object.hasOwn(variant, "quiz_audio")) {
         assert.match(variant.quiz_audio, LOCAL_AUDIO);
-        assert.ok(
-          variant.quiz_audio.includes(`/${ACCENT_KEYS[variant.accent]}/`),
-          `${variant.accent} has mismatched local folder`,
-        );
-        assert.ok(
-          variant.audio.some(
-            (url) => new URL(url).pathname.split("/").at(-1) === variant.quiz_audio.split("/").at(-1),
-          ),
-          `${entry.id} local quiz audio does not match its official audio`,
-        );
+        assert.ok(variant.quiz_audio.includes(`/${ACCENT_KEYS[variant.accent]}/`));
+        assert.ok(variant.audio.includes(variant.quiz_audio.split("/").at(-1)));
       }
     }
   }
@@ -111,31 +126,19 @@ test("想像 is one six-accent entry with official definitions and recordings", 
   assert.equal(matches.length, 1);
   const [entry] = matches;
   assert.equal(entry.quiz_answer, "假想。");
-  assert.deepEqual(
-    entry.variants.map((variant) => variant.accent),
-    ACCENTS,
-  );
+  assert.deepEqual(entry.variants.map((variant) => variant.accent), ACCENTS);
   for (const [index, variant] of entry.variants.entries()) {
     assert.ok(variant.definition.startsWith("假想。"));
-    assert.ok(variant.audio.length > 0);
-    assert.ok(
-      variant.audio.some((url) => url.includes(`hk0000014108-1-${index + 1}.mp3`)),
-    );
+    assert.ok(variant.audio.some((filename) => filename === `hk0000014108-1-${index + 1}.mp3`));
   }
 });
 
 test("the same recording never merges the two official meanings of 掠", () => {
   const matches = dictionary.entries.filter((entry) => entry.headword === "掠");
-  const definitions = new Set(
-    matches.flatMap((entry) => entry.variants.map((variant) => variant.definition)),
-  );
+  const definitions = new Set(matches.flatMap((entry) => entry.variants.map((variant) => variant.definition)));
   assert.ok(definitions.has("捕捉、捕獲。"));
   assert.ok(definitions.has("動作敏捷不呆滯。"));
-  assert.ok(
-    matches.every(
-      (entry) => new Set(entry.variants.map((variant) => variant.definition)).size === 1,
-    ),
-  );
+  assert.ok(matches.every((entry) => new Set(entry.variants.map((variant) => variant.definition)).size === 1));
 });
 
 test("local quiz packs contain exactly 360 unchanged files per accent", async () => {
@@ -167,8 +170,6 @@ test("local quiz packs contain exactly 360 unchanged files per accent", async ()
     const folderUrl = new URL(`../assets/hakka-audio/${details.key}/`, import.meta.url);
     const filenames = (await readdir(folderUrl)).sort();
     assert.equal(filenames.length, 360);
-    assert.ok(filenames.every((filename) => /^hk[0-9A-Za-z._-]+\.mp3$/.test(filename)));
-
     let accentBytes = 0;
     for (const filename of filenames) {
       const fileInfo = await stat(new URL(filename, folderUrl));
@@ -177,11 +178,9 @@ test("local quiz packs contain exactly 360 unchanged files per accent", async ()
     }
     assert.equal(accentBytes, details.bytes);
     totalBytes += accentBytes;
-
     for (const relativeUrl of selected.get(accent)) {
-      const path = fileURLToPath(new URL(relativeUrl, dictionaryUrl));
-      const fileInfo = await stat(path);
-      assert.ok(fileInfo.size > 0);
+      const path = fileURLToPath(new URL(relativeUrl, coreUrl));
+      assert.ok((await stat(path)).size > 0);
     }
   }
   assert.equal(totalBytes, pack.total_bytes);

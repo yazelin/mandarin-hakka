@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import copy
 import hashlib
 import json
 import os
@@ -601,6 +602,128 @@ def write_dictionary(dictionary: dict, output: Path) -> None:
     temporary.replace(output)
 
 
+def _json_bytes(value: object) -> bytes:
+    return (
+        json.dumps(value, ensure_ascii=False, separators=(",", ":")) + "\n"
+    ).encode("utf-8")
+
+
+def _audio_filename(url: str) -> str:
+    """Return the validated filename already represented by an official URL."""
+
+    return PurePosixPath(unquote(urlsplit(url).path)).name
+
+
+def split_web_dictionary(dictionary: dict) -> tuple[dict, dict]:
+    """Create a small first-load dictionary and deferred display details.
+
+    The first bundle contains every headword, accent, pronunciation and Mandarin
+    definition, plus the small local-quiz references.  The deferred bundle keeps
+    every remaining official user-facing field in the same entry/variant order.
+    Build-only grouping IDs and source row sequence numbers are omitted. Official
+    audio origins are not repeated: their validated filenames expand back to
+    ``AUDIO_BASE_URL + filename`` in the web app.
+    """
+
+    revision = hashlib.sha256(_json_bytes(dictionary)).hexdigest()[:16]
+    core_entries: list[list] = []
+    detail_entries: list[list[list]] = []
+    definitions: list[str] = []
+    definition_indexes: dict[str, int] = {}
+    parts_of_speech = [""]
+    part_indexes = {"": 0}
+    locations = [""]
+    location_indexes = {"": 0}
+    category_names = [""]
+    category_indexes = {"": 0}
+    examples = [""]
+    example_indexes = {"": 0}
+    synonyms = [""]
+    synonym_indexes = {"": 0}
+    antonyms = [""]
+    antonym_indexes = {"": 0}
+
+    def intern_definition(value: str) -> int:
+        if value not in definition_indexes:
+            definition_indexes[value] = len(definitions)
+            definitions.append(value)
+        return definition_indexes[value]
+
+    def intern(value: str, values: list[str], indexes: dict[str, int]) -> int:
+        if value not in indexes:
+            indexes[value] = len(values)
+            values.append(value)
+        return indexes[value]
+
+    for entry in dictionary["entries"]:
+        core_variants: list[list] = []
+
+        entry_details: list[list] = []
+        for variant in entry["variants"]:
+            core_variant = [
+                ACCENTS.index(variant["accent"]),
+                variant["pronunciation"],
+                intern_definition(variant["definition"]),
+            ]
+            if variant.get("quiz_audio"):
+                core_variant.append(variant["quiz_audio"])
+            core_variants.append(core_variant)
+
+            category_values = [
+                intern(value, category_names, category_indexes)
+                for value in variant["categories"]
+            ]
+            audio_values = [_audio_filename(url) for url in variant["audio"]]
+            details = [
+                intern(variant["part_of_speech"], parts_of_speech, part_indexes),
+                intern(variant["location"], locations, location_indexes),
+                intern(variant["example"], examples, example_indexes),
+                intern(variant["synonyms"], synonyms, synonym_indexes),
+                intern(variant["antonyms"], antonyms, antonym_indexes),
+                category_values[0] if len(category_values) == 1 else category_values,
+                audio_values[0] if len(audio_values) == 1 else audio_values,
+            ]
+            while len(details) > 1 and details[-1] in ("", 0, []):
+                details.pop()
+            entry_details.append(details)
+
+        core_entries.append([entry["headword"], entry.get("quiz_answer", ""), core_variants])
+        detail_entries.append(entry_details)
+
+    details = {
+        "schema_version": 2,
+        "revision": revision,
+        "source_date": dictionary["metadata"]["source_date"],
+        "entry_count": len(core_entries),
+        "row_count": dictionary["metadata"]["row_count"],
+        "parts_of_speech": parts_of_speech,
+        "locations": locations,
+        "examples": examples,
+        "synonyms": synonyms,
+        "antonyms": antonyms,
+        "categories": category_names,
+        "entries": detail_entries,
+    }
+    metadata = copy.deepcopy(dictionary["metadata"])
+    metadata["web_data"] = {
+        "schema_version": 2,
+        "core_format": 2,
+        "revision": revision,
+        "details_bytes": len(_json_bytes(details)),
+    }
+    core = {"metadata": metadata, "definitions": definitions, "entries": core_entries}
+    return core, details
+
+
+def write_web_dictionary(dictionary: dict, core_output: Path, details_output: Path) -> None:
+    core, details = split_web_dictionary(dictionary)
+    for value, output in ((core, core_output), (details, details_output)):
+        output.parent.mkdir(parents=True, exist_ok=True)
+        temporary = output.with_suffix(f"{output.suffix}.tmp")
+        temporary.write_bytes(_json_bytes(value))
+        temporary.replace(output)
+
+
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -610,7 +733,23 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         metavar="ODS",
         help="依序提供四縣、海陸、大埔、饒平、詔安、南四縣 ODS",
     )
-    parser.add_argument("--output", type=Path, default=Path("data/dictionary.json"))
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help="選擇性輸出未切分的稽核 JSON；網站不會部署或載入此檔",
+    )
+    parser.add_argument(
+        "--web-core-output",
+        type=Path,
+        default=Path("data/dictionary-core.json"),
+        help="網站首載核心詞庫（預設 data/dictionary-core.json）",
+    )
+    parser.add_argument(
+        "--web-details-output",
+        type=Path,
+        default=Path("data/dictionary-details.json"),
+        help="網站背景載入的完整欄位（預設 data/dictionary-details.json）",
+    )
     parser.add_argument(
         "--source-date",
         help="覆寫來源日期（YYYY-MM-DD）；預設取 ODS 內最新檔案日期",
@@ -642,19 +781,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.quiz_audio_output:
             add_quiz_audio_pack(
                 dictionary,
-                args.output,
+                args.web_core_output,
                 args.quiz_audio_output,
                 args.quiz_audio_per_accent,
                 args.download_workers,
             )
-        write_dictionary(dictionary, args.output)
+        if args.output:
+            write_dictionary(dictionary, args.output)
+        write_web_dictionary(dictionary, args.web_core_output, args.web_details_output)
     except (OSError, ValueError, ET.ParseError, zipfile.BadZipFile) as error:
         print(f"建置失敗：{error}", file=sys.stderr)
         return 1
 
     metadata = dictionary["metadata"]
     print(
-        f"完成 {args.output}：{metadata['row_count']:,} 筆腔別資料、"
+        f"完成 {args.web_core_output} + {args.web_details_output}：{metadata['row_count']:,} 筆腔別資料、"
         f"{metadata['entry_count']:,} 個詞義群組、"
         f"{metadata['headword_count']:,} 個不重複詞目、"
         f"{metadata['audio_count']:,} 個音檔"

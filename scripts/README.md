@@ -1,6 +1,6 @@
 # 客語詞庫建置
 
-`build_hakka_dictionary.py` 直接解析教育部臺灣客語辭典提供的六份 ODS，產生網站使用的 `data/dictionary.json`。來源 ODS 不納入 repository；請由[官方資源下載頁](https://hakkadict.moe.edu.tw/resource_download/)取得。
+`build_hakka_dictionary.py` 直接解析教育部臺灣客語辭典提供的六份 ODS，產生網站使用的兩階段 `data/dictionary-core.json` 與 `data/dictionary-details.json`。來源 ODS 不納入 repository；請由[官方資源下載頁](https://hakkadict.moe.edu.tw/resource_download/)取得。
 
 ## 建置完整詞庫與測驗音檔
 
@@ -18,7 +18,7 @@ python3 scripts/build_hakka_dictionary.py \
   --quiz-audio-per-accent 360
 ```
 
-預設輸出為 `data/dictionary.json`。`source_date` 取六份 ODS ZIP 成員中最新的日期，也可用 `--source-date YYYY-MM-DD` 明確覆寫。JSON 使用 UTF-8、最小化格式與固定排序，同一份來源可重現相同內容。
+兩個網站檔案使用相同的 SHA-256 資料指紋，前端驗證一致後才合併及離線保存。`source_date` 取六份 ODS ZIP 成員中最新的日期，也可用 `--source-date YYYY-MM-DD` 明確覆寫。JSON 使用 UTF-8、最小化格式與固定排序，同一份來源可重現相同內容。`--output PATH` 僅供選擇性輸出未切分的稽核檔，網站不需要也不部署該檔。
 
 精選測驗包會從具有乾淨 `quiz_answer` 與官方音檔的資料中，以固定 SHA-256 排序為每腔挑選 360 題；同一腔內不重複詞目、答案或檔名。下載的 MP3 bytes 不轉碼、不改寫，分別放在：
 
@@ -31,42 +31,19 @@ python3 scripts/build_hakka_dictionary.py \
 
 已存在的非空檔案會重用；各腔資料夾中未被本次固定選取的 MP3 會移除，確保檔案數與 metadata 一致。可用 `--download-workers` 調整同時下載數。
 
-## Schema v1
+## 網站兩階段 Schema
 
-頂層資料為：
-
-```json
-{"metadata":{},"entries":[]}
-```
-
-每個 entry 是一個詞義群組：
+`dictionary-core.json` 是首次阻塞下載，保留所有詞目、六腔拼音、華語釋義及挑戰資料。重複釋義集中在 `definitions` 字串表，entry 與 variant 用位置固定的陣列表示，載入後由 `dictionary-data.js` 展開。
 
 ```json
-{
-  "id": "hk0000014108-59e6eecf",
-  "headword": "想像",
-  "quiz_answer": "假想。",
-  "variants": [
-    {
-      "accent": "四縣",
-      "sequence": 15428,
-      "part_of_speech": "動",
-      "pronunciation": "xiong31 xiong55",
-      "location": "",
-      "definition": "假想。對不在眼前的事物，利用過去的記憶或類似的經驗，構想具體的形象。",
-      "example": "…",
-      "synonyms": "聯想",
-      "antonyms": "",
-      "categories": ["思維心態"],
-      "audio": ["https://hakkadict.moe.edu.tw/static/audio/hk0000014108-1-1.mp3"]
-    }
-  ]
-}
+{"metadata":{"web_data":{"schema_version":2,"core_format":2,"revision":"…","details_bytes":13014463}},"definitions":["…"],"entries":[["想像","假想。",[[0,"xiong31 xiong55",123,"../assets/…mp3"]]]]}
 ```
 
-被選入同源測驗包的 variant 另有 `quiz_audio`，其值相對於 `data/dictionary.json`，例如 `../assets/hakka-audio/sixian/hk….mp3`。遠端 `audio[]` 仍完整保留，供一般連網播放。
+`dictionary-details.json` 在核心可用後背景下載，以相同 entry／variant 順序補上詞性、方言點、例句、同反義詞、分類與一般官方音檔名稱。重複字串集中成表；官方音檔只存已驗證檔名，播放時安全還原固定教育部 HTTPS 路徑。建置用群組 ID 與來源列序號不屬於畫面或搜尋內容，因此不進入網站包。
 
-metadata 記錄 schema 版本、六腔、官方來源與來源日期、授權，以及 row、entry、不重複 headword、官方 audio 統計。`metadata.quiz_audio` 另記錄每腔 folder key、檔案數與 bytes。
+被選入同源測驗包的 variant 在核心包另有學習用 `quiz_audio`，例如 `../assets/hakka-audio/sixian/hk….mp3`。
+
+metadata 記錄 schema 版本、六腔、官方來源與來源日期、授權，以及 row、entry、不重複 headword、官方 audio 統計。`metadata.web_data` 記錄兩包版本指紋與完整包精確原始 bytes；`metadata.quiz_audio` 另記錄每腔 folder key、檔案數與 bytes。
 
 ## 不改寫原始內容
 

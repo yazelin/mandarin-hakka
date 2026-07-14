@@ -33,27 +33,46 @@ test("mobile-first page exposes search, six-accent filter, learning routes, and 
   assert.match(css, /\.quiz-options\s*\{[\s\S]*grid-template-columns: 1fr/);
 });
 
-test("all frontend module and PWA edges use release 2", async () => {
+test("all frontend module and PWA edges use release 3", async () => {
   const html = await source("index.html");
-  assert.match(html, /manifest\.webmanifest\?v=2/);
-  assert.match(html, /styles\.css\?v=2/);
-  assert.match(html, /app\.js\?v=2/);
+  assert.match(html, /manifest\.webmanifest\?v=3/);
+  assert.match(html, /styles\.css\?v=3/);
+  assert.match(html, /app\.js\?v=3/);
   const app = await source("app.js");
-  for (const edge of ["search.js?v=2", "quiz.js?v=2", "learning.js?v=2", "offline.js?v=2", "dictionary.json?v=2", "sw.js?v=2"]) {
+  for (const edge of ["search.js?v=3", "quiz.js?v=3", "learning.js?v=3", "offline.js?v=3", "dictionary-data.js?v=3", "dictionary-core.json?v=3", "dictionary-details.json?v=3", "sw.js?v=3"]) {
     assert.ok(app.includes(edge), edge);
   }
   const learning = await source("learning.js");
-  assert.ok(learning.includes("quiz.js?v=2"));
+  assert.ok(learning.includes("quiz.js?v=3"));
   const worker = await source("sw.js");
   const releaseEdges = [...`${html}\n${app}\n${learning}\n${worker}`.matchAll(/\?v=(\d+)/g)];
   assert.ok(releaseEdges.length > 0);
-  assert.deepEqual([...new Set(releaseEdges.map((match) => match[1]))], ["2"]);
+  assert.deepEqual([...new Set(releaseEdges.map((match) => match[1]))], ["3"]);
 });
 
-test("first load finishes dictionary initialization before registering the service worker", async () => {
+test("core enables the app before details continue in the background", async () => {
   const app = await source("app.js");
-  assert.match(app, /initialize\(\)\.finally\(registerServiceWorker\);/);
-  assert.doesNotMatch(app, /registerServiceWorker\(\);\s*initialize\(\);/);
+  assert.match(app, /initializeCore\(\)\.then\(\(ready\) => \{\s*registerServiceWorker\(\);\s*if \(ready\) loadDictionaryDetails\(\);/);
+  assert.match(app, /elements\.input\.disabled = false;[\s\S]*state\.detailsStatus = "pending"/);
+  assert.match(app, /mergeDictionaryDetails\(state\.dictionary, result\.data\);[\s\S]*storeDataBytes\(DETAILS_DATA_URL, result\.bytes\)/);
+  assert.match(app, /if \(state\.activeQuery\) \{\s*runSearch\(\{ updateHash: false, resetLimit: false, focusResults: false \}\);/);
+});
+
+test("text download state stays global, accessible, honest, and retryable", async () => {
+  const html = await source("index.html");
+  const mainStart = html.indexOf('<main id="main">');
+  const dictionaryStart = html.indexOf('<section id="dictionary"');
+  const statusStart = html.indexOf('id="text-data-status"');
+  assert.ok(mainStart < statusStart && statusStart < dictionaryStart);
+  assert.match(html, /id="text-data-progress"[\s\S]*aria-describedby="text-data-detail"/);
+  assert.match(html, /id="text-data-announcement"[\s\S]*aria-live="polite"/);
+  const app = await source("app.js");
+  assert.match(app, /Math\.floor\(progress \/ 10\) \* 10/);
+  assert.match(app, /pendingCoreBytes/);
+  assert.match(app, /retryTextDataStorage\(\)/);
+  assert.match(app, /state\.pendingCoreBytes[\s\S]*storeDataBytes\(CORE_DATA_URL, state\.pendingCoreBytes\)/);
+  assert.match(app, /完整文字詞庫已儲存/);
+  assert.doesNotMatch(app, /完整詞庫已儲存在這台裝置/);
 });
 
 test("learning data and share assets use the Hakka namespace", async () => {

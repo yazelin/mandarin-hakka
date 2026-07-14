@@ -1,7 +1,9 @@
 const CACHE_PREFIX = "mandarin-hakka-";
-const RELEASE_REVISION = "2";
+const RELEASE_REVISION = "3";
 // Bump the shell cache and every release query together.
-const SHELL_CACHE = "mandarin-hakka-shell-v2";
+const SHELL_CACHE = "mandarin-hakka-shell-v3";
+// Text payloads enter this cache only after the page validates their shared revision.
+const DATA_CACHE = "mandarin-hakka-data-v3";
 // Audio is kept across shell updates until its source format actually changes.
 const AUDIO_CACHE = "mandarin-hakka-audio-v1";
 const OFFICIAL_AUDIO_ORIGIN = "https://hakkadict.moe.edu.tw";
@@ -16,19 +18,19 @@ const AUDIO_DOWNLOAD_CONCURRENCY = 4;
 const SHELL_FILES = [
   "./",
   "./index.html",
-  "./styles.css?v=2",
-  "./app.js?v=2",
-  "./search.js?v=2",
-  "./quiz.js?v=2",
-  "./learning.js?v=2",
-  "./offline.js?v=2",
-  "./manifest.webmanifest?v=2",
+  "./styles.css?v=3",
+  "./app.js?v=3",
+  "./search.js?v=3",
+  "./quiz.js?v=3",
+  "./learning.js?v=3",
+  "./offline.js?v=3",
+  "./dictionary-data.js?v=3",
+  "./manifest.webmanifest?v=3",
   "./assets/icon.svg",
   "./assets/icon-192.png",
   "./assets/icon-512.png",
   "./assets/icon-maskable-512.png",
   "./assets/apple-touch-icon.png",
-  "./data/dictionary.json?v=2",
 ];
 
 const SCOPE_URL = new URL(self.registration.scope);
@@ -131,9 +133,8 @@ async function precacheShell() {
   await Promise.all(
     SHELL_FILES.map(async (path) => {
       const url = new URL(path, SCOPE_URL);
-      // Release-query URLs are immutable. In particular this lets the 46 MB
-      // dictionary reuse the page's first-load HTTP response instead of forcing
-      // a second transfer while this worker installs.
+      // Release-query shell URLs are immutable. Dictionary payloads are not
+      // install members; the page validates and stores them exactly once.
       const cacheMode = url.searchParams.get("v") === RELEASE_REVISION ? "force-cache" : "reload";
       const request = new Request(url, { cache: cacheMode });
       const response = await fetch(request);
@@ -159,7 +160,7 @@ self.addEventListener("activate", (event) => {
       await Promise.all(
         keys
           .filter(
-            (key) => key.startsWith(CACHE_PREFIX) && key !== SHELL_CACHE && key !== AUDIO_CACHE,
+            (key) => key.startsWith(CACHE_PREFIX) && key !== SHELL_CACHE && key !== DATA_CACHE && key !== AUDIO_CACHE,
           )
           .map((key) => caches.delete(key)),
       );
@@ -332,7 +333,7 @@ async function downloadAudioBatch(event, data) {
 self.addEventListener("message", (event) => {
   const data = event.data;
   if (data?.type === "GET_RELEASE") {
-    postMessageReply(event, { release: RELEASE_REVISION, audioCache: AUDIO_CACHE });
+    postMessageReply(event, { release: RELEASE_REVISION, audioCache: AUDIO_CACHE, dataCache: DATA_CACHE });
     return;
   }
   if (data?.type === "CACHE_HAKKA_AUDIO") {
@@ -384,18 +385,12 @@ async function handleNavigation(request, url) {
   return cached || fetch(request, { cache: "no-cache" });
 }
 
-async function networkFirstData(event, request) {
-  try {
-    const response = await fetch(request, { cache: "no-cache" });
-    if (isCacheableResponse(response)) {
-      keepAlive(event, putBestEffort(SHELL_CACHE, request, response.clone()));
-    }
-    return response;
-  } catch (error) {
-    const cached = await matchBestEffort(SHELL_CACHE, request);
-    if (cached) return cached;
-    throw error;
-  }
+async function cacheFirstData(request) {
+  const cached = await matchBestEffort(DATA_CACHE, request);
+  if (cached) return cached;
+  // Do not cache an unvalidated JSON response here. app.js verifies the core /
+  // details revision pair and writes the exact bytes to DATA_CACHE afterward.
+  return fetch(request, { cache: "no-cache" });
 }
 
 async function rangedResponse(request, response) {
@@ -481,6 +476,6 @@ self.addEventListener("fetch", (event) => {
     return;
   }
   if (isDataRequest(url)) {
-    event.respondWith(networkFirstData(event, request));
+    event.respondWith(cacheFirstData(request));
   }
 });

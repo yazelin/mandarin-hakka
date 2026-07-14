@@ -3,14 +3,21 @@ import {
   listAccents,
   pickSuggestionTerms,
   searchEntriesDetailed,
-} from "./search.js?v=2";
-import { buildQuizPool } from "./quiz.js?v=2";
-import { initializeLearning } from "./learning.js?v=2";
-import { canDownloadAccentPack, classifyServiceWorkerReply } from "./offline.js?v=2";
+} from "./search.js?v=3";
+import { buildQuizPool } from "./quiz.js?v=3";
+import { initializeLearning } from "./learning.js?v=3";
+import { canDownloadAccentPack, classifyServiceWorkerReply } from "./offline.js?v=3";
+import {
+  expandCoreDictionary,
+  mergeDictionaryDetails,
+  officialAudioUrl,
+} from "./dictionary-data.js?v=3";
 
-const DATA_URL = "./data/dictionary.json?v=2";
-const DATA_BASE_URL = new URL(DATA_URL, window.location.href);
-const RELEASE_REVISION = "2";
+const CORE_DATA_URL = "./data/dictionary-core.json?v=3";
+const DETAILS_DATA_URL = "./data/dictionary-details.json?v=3";
+const DATA_BASE_URL = new URL(CORE_DATA_URL, window.location.href);
+const RELEASE_REVISION = "3";
+const DATA_CACHE = "mandarin-hakka-data-v3";
 const AUDIO_CACHE = "mandarin-hakka-audio-v1";
 const LEARNING_AUDIO_LIMIT = 500;
 const SOURCE_URL = "https://hakkadict.moe.edu.tw/";
@@ -41,6 +48,12 @@ const elements = {
   cancelAudioDownload: document.querySelector("#cancel-audio-download"),
   clearOfflineAudio: document.querySelector("#clear-offline-audio"),
   offlineStatus: document.querySelector("#offline-status"),
+  textDataStatus: document.querySelector("#text-data-status"),
+  textDataTitle: document.querySelector("#text-data-title"),
+  textDataDetail: document.querySelector("#text-data-detail"),
+  textDataProgress: document.querySelector("#text-data-progress"),
+  retryTextData: document.querySelector("#retry-text-data"),
+  textDataAnnouncement: document.querySelector("#text-data-announcement"),
   installApp: document.querySelector("#install-app"),
   audioDock: document.querySelector("#audio-dock"),
   audioTitle: document.querySelector("#audio-title"),
@@ -63,6 +76,14 @@ const state = {
   downloading: false,
   deferredInstallPrompt: null,
   appReady: false,
+  detailsStatus: "pending",
+  detailsStored: false,
+  coreStorePromise: Promise.resolve(false),
+  coreStored: false,
+  detailsPayloadStored: false,
+  pendingCoreBytes: null,
+  pendingDetailsBytes: null,
+  lastTextDataAnnouncement: "",
 };
 
 function makeElement(tag, options = {}) {
@@ -82,9 +103,107 @@ function formatMegabytes(bytes) {
   return new Intl.NumberFormat("zh-TW", { maximumFractionDigits: 1 }).format(megabytes);
 }
 
+function formatDataBytes(bytes) {
+  const value = Number(bytes) || 0;
+  if (value < 1024 * 1024) return `${formatNumber(Math.round(value / 1024))} KB`;
+  return `${formatMegabytes(value)} MB`;
+}
+
 function setStatus(message, kind = "") {
   elements.status.textContent = message;
   elements.status.dataset.kind = kind;
+}
+
+function setTextDataStatus(kind, title, detail, progress = null) {
+  elements.textDataStatus.dataset.kind = kind;
+  elements.textDataTitle.textContent = title;
+  elements.textDataDetail.textContent = detail;
+  elements.retryTextData.hidden = kind !== "error";
+  elements.retryTextData.textContent = state.appReady
+    ? "繼續下載完整內容"
+    : "重試下載查詞資料";
+  if (Number.isFinite(progress)) {
+    elements.textDataProgress.value = Math.max(0, Math.min(100, progress));
+  } else {
+    elements.textDataProgress.removeAttribute("value");
+  }
+  const bucket = Number.isFinite(progress) ? Math.floor(progress / 10) * 10 : "state";
+  const stableTitle = title.replace(/：\d+%$/, "");
+  const announcementKey = `${kind}:${stableTitle}:${bucket}`;
+  if (announcementKey !== state.lastTextDataAnnouncement) {
+    state.lastTextDataAnnouncement = announcementKey;
+    elements.textDataAnnouncement.textContent = `${title}。${detail}`;
+  }
+}
+
+function renderStoredTextDataStatus() {
+  if (!state.detailsStored) return;
+  const offlineReady = ["current", "installed"].includes(state.serviceWorkerCompatibility);
+  const detail = offlineReady
+    ? "詞目、釋義、例句等文字內容均可離線查詢；一般官方發音仍依播放快取。"
+    : state.serviceWorkerCompatibility === "checking"
+      ? "完整文字已保存；離線服務仍在安裝，完成後即可離線重新開啟。"
+      : "完整文字已保存，但此瀏覽器尚未啟用離線服務；連網時仍可完整使用。";
+  setTextDataStatus("ready", "完整文字詞庫已儲存", detail, 100);
+}
+
+async function storeDataBytes(url, bytes) {
+  if (!("caches" in window)) return false;
+  try {
+    const cache = await caches.open(DATA_CACHE);
+    const request = new Request(new URL(url, window.location.href));
+    const response = new Response(bytes, { headers: { "content-type": "application/json; charset=utf-8" } });
+    await cache.put(request, response);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function deleteStoredData(url) {
+  if (!("caches" in window)) return;
+  try {
+    const cache = await caches.open(DATA_CACHE);
+    await cache.delete(new Request(new URL(url, window.location.href)));
+  } catch {
+    // A failed cleanup will be retried by the next versioned request.
+  }
+}
+
+async function fetchJsonWithProgress(url, expectedBytes = 0, onProgress = () => {}) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const reader = response.body?.getReader?.();
+  if (!reader) {
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    onProgress(bytes.byteLength, expectedBytes);
+    return { data: JSON.parse(new TextDecoder().decode(bytes)), bytes };
+  }
+
+  const chunks = [];
+  let loaded = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    loaded += value.byteLength;
+    onProgress(loaded, expectedBytes);
+  }
+  const bytes = new Uint8Array(loaded);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  const data = JSON.parse(new TextDecoder().decode(bytes));
+  return { data, bytes };
+}
+
+function waitForMainThread() {
+  return new Promise((resolve) => {
+    if ("requestIdleCallback" in window) window.requestIdleCallback(resolve, { timeout: 800 });
+    else window.setTimeout(resolve, 0);
+  });
 }
 
 function stringValue(value) {
@@ -94,7 +213,7 @@ function stringValue(value) {
 
 function officialAudioUrls(variant) {
   const values = Array.isArray(variant?.audio) ? variant.audio : variant?.audio ? [variant.audio] : [];
-  return [...new Set(values.map(stringValue).filter((url) => /^https:\/\//i.test(url)))];
+  return [...new Set(values.map(officialAudioUrl).filter(Boolean))];
 }
 
 function resolveLearningAudioUrl(path) {
@@ -193,7 +312,10 @@ function renderVariant(entry, variant, matched = false) {
     button.addEventListener("click", () => playVariant(entry, variant, url, index + 1));
     actions.append(button);
   });
-  if (!audio.length) actions.append(makeElement("span", { className: "audio-unavailable", text: "未提供錄音" }));
+  if (!audio.length) {
+    const text = state.detailsStatus === "ready" ? "未提供錄音" : "完整資料下載中";
+    actions.append(makeElement("span", { className: "audio-unavailable", text }));
+  }
   article.append(words, details, actions);
   return article;
 }
@@ -241,7 +363,7 @@ function renderEmpty(query) {
   elements.results.replaceChildren(empty);
 }
 
-function runSearch({ updateHash = true, resetLimit = true } = {}) {
+function runSearch({ updateHash = true, resetLimit = true, focusResults = true } = {}) {
   const query = elements.input.value.trim();
   if (resetLimit) state.resultLimit = 40;
   state.activeQuery = query;
@@ -279,8 +401,10 @@ function runSearch({ updateHash = true, resetLimit = true } = {}) {
     if (elements.accent.value) params.set("accent", elements.accent.value);
     history.replaceState(null, "", `#dictionary?${params}`);
   }
-  elements.results.focus({ preventScroll: true });
-  elements.results.scrollIntoView({ behavior: "smooth", block: "start" });
+  if (focusResults) {
+    elements.results.focus({ preventScroll: true });
+    elements.results.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 }
 
 function renderSuggestions() {
@@ -391,7 +515,7 @@ function handleServiceWorkerMessage(message, port) {
     updateOfflineButton();
   } else if (message.type === "HAKKA_AUDIO_CLEARED") {
     state.downloading = false;
-    elements.offlineStatus.textContent = "已清除離線學習語音；文字詞庫仍可離線查詢。";
+    elements.offlineStatus.textContent = "已清除離線學習語音；不影響上方顯示的文字詞庫狀態。";
     port?.close?.();
     updateOfflineButton();
   } else if (message.type === "HAKKA_AUDIO_CANCELLED") {
@@ -454,19 +578,21 @@ async function checkServiceWorkerCompatibility(registration = state.serviceWorke
     } else if (state.serviceWorkerCompatibility === "installed") {
       elements.offlineStatus.textContent = "離線服務已安裝，可直接下載學習語音。";
     } else {
-      elements.offlineStatus.textContent = "詞庫已可離線；選擇腔調可下載挑戰題語音。";
+      elements.offlineStatus.textContent = "離線服務已就緒；選擇腔調可下載挑戰題語音。文字詞庫狀態請見上方。";
     }
   }
+  renderStoredTextDataStatus();
   updateOfflineButton();
 }
 
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) {
     elements.offlineStatus.textContent = "此瀏覽器不支援離線安裝；仍可連網查詞與挑戰。";
+    renderStoredTextDataStatus();
     return;
   }
   try {
-    const registration = await navigator.serviceWorker.register("./sw.js?v=2", { scope: "./" });
+    const registration = await navigator.serviceWorker.register("./sw.js?v=3", { scope: "./" });
     state.serviceWorkerRegistration = registration;
     registration.addEventListener("updatefound", () => {
       registration.installing?.addEventListener("statechange", () => checkServiceWorkerCompatibility(registration));
@@ -480,6 +606,7 @@ async function registerServiceWorker() {
   } catch {
     state.serviceWorkerCompatibility = "none";
     elements.offlineStatus.textContent = "離線服務尚未安裝；查詞與連網播放仍可使用。";
+    renderStoredTextDataStatus();
     updateOfflineButton();
   }
 }
@@ -494,12 +621,23 @@ function restoreSearchFromHash() {
   if (query) runSearch({ updateHash: false });
 }
 
-async function initialize() {
+async function initializeCore() {
+  if (state.appReady) return true;
+  state.detailsStatus = "core-loading";
+  setTextDataStatus(
+    "loading",
+    "正在下載基本查詞資料…",
+    "完成後可先查詞，其餘完整內容會繼續在背景下載。",
+  );
+  elements.form.setAttribute("aria-busy", "true");
   try {
-    const response = await fetch(DATA_URL);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const dictionary = await response.json();
-    if (!Array.isArray(dictionary?.entries)) throw new TypeError("詞庫格式不符");
+    const result = await fetchJsonWithProgress(CORE_DATA_URL);
+    const dictionary = expandCoreDictionary(result.data);
+    state.coreStorePromise = storeDataBytes(CORE_DATA_URL, result.bytes).then((stored) => {
+      state.coreStored = stored;
+      state.pendingCoreBytes = stored ? null : result.bytes;
+      return stored;
+    });
     state.dictionary = dictionary;
     state.index = createSearchIndex(dictionary);
     populateAccents();
@@ -522,7 +660,15 @@ async function initialize() {
     elements.submit.disabled = false;
     elements.accent.disabled = false;
     elements.shuffleSuggestions.disabled = false;
+    elements.form.setAttribute("aria-busy", "false");
     setStatus(`詞庫已就緒，共 ${formatNumber(metadata.headword_count ?? metadata.entry_count ?? dictionary.entries.length)} 個客語詞目。`, "success");
+    state.detailsStatus = "pending";
+    setTextDataStatus(
+      "loading",
+      "查詞已可使用；完整資料正在背景下載",
+      "例句、方言點、同反義詞、分類與官方發音的播放資料尚在下載，可先開始使用。",
+      0,
+    );
     state.learning = initializeLearning({
       dictionary,
       playAudio: playQuizAudio,
@@ -532,9 +678,128 @@ async function initialize() {
     if (!isStandalone()) elements.installApp.hidden = false;
     restoreSearchFromHash();
     updateOfflineButton();
+    return true;
   } catch (error) {
     console.error(error);
+    await deleteStoredData(CORE_DATA_URL);
+    state.detailsStatus = "core-error";
+    elements.form.setAttribute("aria-busy", "false");
     setStatus("詞庫載入失敗。若目前離線，請先連網開啟一次後再試。", "error");
+    setTextDataStatus(
+      "error",
+      "查詞資料下載失敗",
+      "目前還不能查詞；請檢查網路後重試。",
+    );
+    return false;
+  }
+}
+
+async function loadDictionaryDetails() {
+  if (!state.dictionary || ["loading", "indexing"].includes(state.detailsStatus)) return;
+  if (state.pendingCoreBytes) {
+    const coreBytes = state.pendingCoreBytes;
+    state.coreStorePromise = storeDataBytes(CORE_DATA_URL, coreBytes).then((stored) => {
+      state.coreStored = stored;
+      state.pendingCoreBytes = stored ? null : coreBytes;
+      return stored;
+    });
+  }
+  state.detailsStatus = "loading";
+  const expectedBytes = Number(state.dictionary.metadata?.web_data?.details_bytes) || 0;
+  setTextDataStatus(
+    "loading",
+    "查詞已可使用；完整資料正在背景下載",
+    "例句等完整內容即將開始下載，可先開始使用。",
+    0,
+  );
+  try {
+    const result = await fetchJsonWithProgress(
+      DETAILS_DATA_URL,
+      expectedBytes,
+      (loaded, total) => {
+        const percent = total ? Math.min(99, Math.round((loaded / total) * 100)) : null;
+        const bytes = total
+          ? `${formatDataBytes(Math.min(loaded, total))} / ${formatDataBytes(total)}`
+          : `${formatDataBytes(loaded)} 已接收`;
+        setTextDataStatus(
+          "loading",
+          `查詞已可使用；完整資料正在背景下載${percent === null ? "" : `：${percent}%`}`,
+          `正在接收例句等完整內容（${bytes}），可先開始使用。`,
+          percent,
+        );
+      },
+    );
+    mergeDictionaryDetails(state.dictionary, result.data);
+    const detailsStorePromise = storeDataBytes(DETAILS_DATA_URL, result.bytes).then((stored) => {
+      state.detailsPayloadStored = stored;
+      state.pendingDetailsBytes = stored ? null : result.bytes;
+      return stored;
+    });
+    state.detailsStatus = "indexing";
+    setTextDataStatus(
+      "loading",
+      "完整資料下載完成；正在建立全文索引",
+      "查詞仍可使用，完成後即可搜尋例句與同反義詞。",
+      100,
+    );
+    await waitForMainThread();
+    state.index = createSearchIndex(state.dictionary);
+    const [coreStored, detailsStored] = await Promise.all([
+      state.coreStorePromise,
+      detailsStorePromise,
+    ]);
+    state.detailsStored = Boolean(coreStored && detailsStored);
+    state.detailsStatus = "ready";
+    if (state.detailsStored) {
+      renderStoredTextDataStatus();
+    } else {
+      setTextDataStatus(
+        "error",
+        "查詞已可使用；完整內容未能離線保存",
+        "完整資料已載入，但瀏覽器未能寫入離線空間；可重試保存。",
+      );
+    }
+    if (state.activeQuery) {
+      runSearch({ updateHash: false, resetLimit: false, focusResults: false });
+    }
+  } catch (error) {
+    console.error(error);
+    await deleteStoredData(DETAILS_DATA_URL);
+    state.detailsStatus = "error";
+    setTextDataStatus(
+      "error",
+      "查詞已可使用；完整資料尚未下載完成",
+      "目前仍可查詞目、六腔拼音與華語釋義；連網後可繼續下載例句等內容。",
+    );
+  }
+}
+
+async function retryTextDataStorage() {
+  setTextDataStatus(
+    "loading",
+    "查詞已可使用；正在重試離線保存",
+    "不會重新建立詞庫，完成前仍可繼續使用。",
+  );
+  const coreStore = state.pendingCoreBytes
+    ? storeDataBytes(CORE_DATA_URL, state.pendingCoreBytes)
+    : Promise.resolve(state.coreStored);
+  const detailsStore = state.pendingDetailsBytes
+    ? storeDataBytes(DETAILS_DATA_URL, state.pendingDetailsBytes)
+    : Promise.resolve(state.detailsPayloadStored);
+  const [coreStored, detailsStored] = await Promise.all([coreStore, detailsStore]);
+  state.coreStored = coreStored;
+  state.detailsPayloadStored = detailsStored;
+  if (coreStored) state.pendingCoreBytes = null;
+  if (detailsStored) state.pendingDetailsBytes = null;
+  state.detailsStored = Boolean(coreStored && detailsStored);
+  if (state.detailsStored) {
+    renderStoredTextDataStatus();
+  } else {
+    setTextDataStatus(
+      "error",
+      "查詞已可使用；完整內容仍未能離線保存",
+      "瀏覽器可能沒有足夠儲存空間；清出空間後可再試一次。",
+    );
   }
 }
 
@@ -547,6 +812,16 @@ elements.accent.addEventListener("change", () => {
   if (state.activeQuery) runSearch();
 });
 elements.shuffleSuggestions.addEventListener("click", renderSuggestions);
+elements.retryTextData.addEventListener("click", async () => {
+  elements.retryTextData.hidden = true;
+  if (!state.appReady) {
+    if (await initializeCore()) loadDictionaryDetails();
+  } else if (state.detailsStatus === "ready" && (state.pendingCoreBytes || state.pendingDetailsBytes)) {
+    retryTextDataStorage();
+  } else {
+    loadDictionaryDetails();
+  }
+});
 elements.downloadAccentAudio.addEventListener("click", startAudioDownload);
 elements.cancelAudioDownload.addEventListener("click", () => {
   const worker = activeWorker();
@@ -614,7 +889,10 @@ elements.installApp.addEventListener("click", async () => {
 window.addEventListener("appinstalled", () => {
   state.deferredInstallPrompt = null;
   elements.installApp.hidden = true;
-  elements.offlineStatus.textContent = "App 已安裝；文字詞庫可離線，學習語音可依腔調下載。";
+  elements.offlineStatus.textContent = "App 已安裝；文字詞庫離線狀態請見上方，學習語音可依腔調下載。";
 });
 
-initialize().finally(registerServiceWorker);
+initializeCore().then((ready) => {
+  registerServiceWorker();
+  if (ready) loadDictionaryDetails();
+});
