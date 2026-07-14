@@ -57,6 +57,8 @@ python3 -m unittest discover -s test -p 'test_*.py'
 
 ## 重新產生詞庫
 
+詞庫建置完成不等於可以直接發布。App shell、data cache 與 exact-commit CDN 採獨立版本；維護者與 Agent 必須依照 [資料發布手冊](docs/DATA-RELEASE.md) 的兩個 commit 流程、同步矩陣、大小限制與上線驗證執行。
+
 先從教育部[客語資源下載](https://hakkadict.moe.edu.tw/resource_download/)取得六份 ODS，再依四縣、海陸、大埔、饒平、詔安、南四縣順序執行：
 
 ```bash

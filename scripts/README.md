@@ -62,3 +62,6 @@ node --test test/data.test.js
 ```
 
 測試涵蓋 ODS 解析、空白正規化、安全音檔 URL、同形異義拆分、固定選題、實際檔案 bytes 統計，以及「想像」六腔資料。
+
+產生檔案只是建置步驟。修改 data URL、cache 名稱或 CDN commit 前，必須依照
+[`docs/DATA-RELEASE.md`](../docs/DATA-RELEASE.md) 的完整發布流程執行。
