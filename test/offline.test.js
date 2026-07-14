@@ -10,12 +10,12 @@ import {
 } from "../offline.js";
 
 const expected = {
-  releaseRevision: "3",
+  releaseRevision: "4",
   audioCache: "mandarin-hakka-audio-v1",
 };
 
-test("a verified v3 worker allows an accent pack before and after it controls the page", () => {
-  const reply = { release: "3", audioCache: expected.audioCache };
+test("a verified v4 worker allows an accent pack before and after it controls the page", () => {
+  const reply = { release: "4", audioCache: expected.audioCache };
   assert.equal(classifyServiceWorkerReply(reply, { ...expected, controlled: false }), "installed");
   assert.equal(classifyServiceWorkerReply(reply, { ...expected, controlled: true }), "current");
   assert.equal(canDownloadOfflineAudio("installed"), true);

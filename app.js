@@ -3,20 +3,33 @@ import {
   listAccents,
   pickSuggestionTerms,
   searchEntriesDetailed,
-} from "./search.js?v=3";
-import { buildQuizPool } from "./quiz.js?v=3";
-import { initializeLearning } from "./learning.js?v=3";
-import { canDownloadAccentPack, classifyServiceWorkerReply } from "./offline.js?v=3";
+} from "./search.js?v=4";
+import { buildQuizPool } from "./quiz.js?v=4";
+import { initializeLearning } from "./learning.js?v=4";
+import { canDownloadAccentPack, classifyServiceWorkerReply } from "./offline.js?v=4";
 import {
   expandCoreDictionary,
   mergeDictionaryDetails,
   officialAudioUrl,
-} from "./dictionary-data.js?v=3";
+  validateDictionaryDetails,
+} from "./dictionary-data.js?v=4";
+import {
+  deleteStoredData,
+  loadValidatedJson,
+  requestPersistentStorage,
+  storeDataBytes,
+} from "./data-loader.js?v=4";
 
+// Dictionary bytes are independent from the app shell. Keeping their canonical
+// v3 key lets an existing installation reuse the exact same validated payload
+// after UI-only releases instead of downloading it again.
 const CORE_DATA_URL = "./data/dictionary-core.json?v=3";
 const DETAILS_DATA_URL = "./data/dictionary-details.json?v=3";
+const PRIMARY_DATA_BASE = "https://cdn.jsdelivr.net/gh/yazelin/mandarin-hakka@f953fbd518aaecf64ebda0d63b4be1b2a22ad813/";
+const CORE_PRIMARY_URL = `${PRIMARY_DATA_BASE}data/dictionary-core.json`;
+const DETAILS_PRIMARY_URL = `${PRIMARY_DATA_BASE}data/dictionary-details.json`;
 const DATA_BASE_URL = new URL(CORE_DATA_URL, window.location.href);
-const RELEASE_REVISION = "3";
+const RELEASE_REVISION = "4";
 const DATA_CACHE = "mandarin-hakka-data-v3";
 const AUDIO_CACHE = "mandarin-hakka-audio-v1";
 const LEARNING_AUDIO_LIMIT = 500;
@@ -84,6 +97,8 @@ const state = {
   pendingCoreBytes: null,
   pendingDetailsBytes: null,
   lastTextDataAnnouncement: "",
+  storagePersistence: "checking",
+  storagePersistencePromise: null,
 };
 
 function makeElement(tag, options = {}) {
@@ -139,64 +154,30 @@ function setTextDataStatus(kind, title, detail, progress = null) {
 function renderStoredTextDataStatus() {
   if (!state.detailsStored) return;
   const offlineReady = ["current", "installed"].includes(state.serviceWorkerCompatibility);
+  const retention = state.storagePersistence === "persistent"
+    ? "瀏覽器已允許持久保留；下次會直接從本機開啟，不需重新下載。"
+    : "下次會優先從本機開啟，不需重新下載；清除網站資料時仍會移除。";
   const detail = offlineReady
-    ? "詞目、釋義、例句等文字內容均可離線查詢；一般官方發音仍依播放快取。"
+    ? `${retention} 詞目、釋義與例句均可離線查詢；一般官方發音仍依播放快取。`
     : state.serviceWorkerCompatibility === "checking"
-      ? "完整文字已保存；離線服務仍在安裝，完成後即可離線重新開啟。"
-      : "完整文字已保存，但此瀏覽器尚未啟用離線服務；連網時仍可完整使用。";
+      ? `${retention} 離線服務仍在安裝，完成後即可離線重新開啟。`
+      : `${retention} 此瀏覽器尚未啟用離線服務，連網時仍可完整使用。`;
   setTextDataStatus("ready", "完整文字詞庫已儲存", detail, 100);
 }
 
-async function storeDataBytes(url, bytes) {
-  if (!("caches" in window)) return false;
-  try {
-    const cache = await caches.open(DATA_CACHE);
-    const request = new Request(new URL(url, window.location.href));
-    const response = new Response(bytes, { headers: { "content-type": "application/json; charset=utf-8" } });
-    await cache.put(request, response);
-    return true;
-  } catch {
-    return false;
-  }
+function dataCacheOptions() {
+  return { cacheName: DATA_CACHE, baseUrl: window.location.href };
 }
 
-async function deleteStoredData(url) {
-  if (!("caches" in window)) return;
-  try {
-    const cache = await caches.open(DATA_CACHE);
-    await cache.delete(new Request(new URL(url, window.location.href)));
-  } catch {
-    // A failed cleanup will be retried by the next versioned request.
+function ensurePersistentDataStorage() {
+  if (!state.storagePersistencePromise) {
+    state.storagePersistencePromise = requestPersistentStorage().then((status) => {
+      state.storagePersistence = status;
+      renderStoredTextDataStatus();
+      return status;
+    });
   }
-}
-
-async function fetchJsonWithProgress(url, expectedBytes = 0, onProgress = () => {}) {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  const reader = response.body?.getReader?.();
-  if (!reader) {
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    onProgress(bytes.byteLength, expectedBytes);
-    return { data: JSON.parse(new TextDecoder().decode(bytes)), bytes };
-  }
-
-  const chunks = [];
-  let loaded = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-    loaded += value.byteLength;
-    onProgress(loaded, expectedBytes);
-  }
-  const bytes = new Uint8Array(loaded);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  const data = JSON.parse(new TextDecoder().decode(bytes));
-  return { data, bytes };
+  return state.storagePersistencePromise;
 }
 
 function waitForMainThread() {
@@ -592,7 +573,7 @@ async function registerServiceWorker() {
     return;
   }
   try {
-    const registration = await navigator.serviceWorker.register("./sw.js?v=3", { scope: "./" });
+    const registration = await navigator.serviceWorker.register("./sw.js?v=4", { scope: "./" });
     state.serviceWorkerRegistration = registration;
     registration.addEventListener("updatefound", () => {
       registration.installing?.addEventListener("statechange", () => checkServiceWorkerCompatibility(registration));
@@ -626,18 +607,22 @@ async function initializeCore() {
   state.detailsStatus = "core-loading";
   setTextDataStatus(
     "loading",
-    "正在下載基本查詞資料…",
-    "完成後可先查詞，其餘完整內容會繼續在背景下載。",
+    "正在開啟基本查詞資料…",
+    "會先讀取這台裝置已保存的詞庫；本機沒有時才從網路下載。",
   );
   elements.form.setAttribute("aria-busy", "true");
   try {
-    const result = await fetchJsonWithProgress(CORE_DATA_URL);
-    const dictionary = expandCoreDictionary(result.data);
-    state.coreStorePromise = storeDataBytes(CORE_DATA_URL, result.bytes).then((stored) => {
-      state.coreStored = stored;
-      state.pendingCoreBytes = stored ? null : result.bytes;
-      return stored;
+    const result = await loadValidatedJson({
+      canonicalUrl: CORE_DATA_URL,
+      primaryUrl: CORE_PRIMARY_URL,
+      ...dataCacheOptions(),
+      validate: expandCoreDictionary,
     });
+    const dictionary = result.value;
+    state.coreStored = result.stored;
+    state.pendingCoreBytes = result.stored ? null : result.bytes;
+    state.coreStorePromise = Promise.resolve(result.stored);
+    if (result.stored) void ensurePersistentDataStorage();
     state.dictionary = dictionary;
     state.index = createSearchIndex(dictionary);
     populateAccents();
@@ -649,11 +634,10 @@ async function initializeCore() {
       0,
     );
     const quizCountFromMetadata = Number(metadata.quiz_audio?.total_count) || 0;
-    const quizPool = buildQuizPool(dictionary);
     elements.termCount.textContent = formatNumber(metadata.headword_count ?? metadata.entry_count ?? dictionary.entries.length);
     elements.variantCount.textContent = formatNumber(metadata.row_count ?? variants);
     elements.audioCount.textContent = formatNumber(metadata.audio_count);
-    elements.quizCount.textContent = formatNumber(quizCountFromMetadata || quizPool.length);
+    elements.quizCount.textContent = formatNumber(quizCountFromMetadata || buildQuizPool(dictionary).length);
     elements.sourceDate.textContent = metadata.source_date || "以詞庫檔案為準";
 
     elements.input.disabled = false;
@@ -661,12 +645,17 @@ async function initializeCore() {
     elements.accent.disabled = false;
     elements.shuffleSuggestions.disabled = false;
     elements.form.setAttribute("aria-busy", "false");
-    setStatus(`詞庫已就緒，共 ${formatNumber(metadata.headword_count ?? metadata.entry_count ?? dictionary.entries.length)} 個客語詞目。`, "success");
+    let readySource = result.stored ? "已下載並保存" : "已從備援來源載入";
+    if (result.source === "cache") readySource = "已從本機開啟";
+    else if (result.source === "primary") {
+      readySource = result.stored ? "已由高速節點下載並保存" : "已由高速節點載入";
+    }
+    setStatus(`${readySource}，共 ${formatNumber(metadata.headword_count ?? metadata.entry_count ?? dictionary.entries.length)} 個客語詞目。`, "success");
     state.detailsStatus = "pending";
     setTextDataStatus(
       "loading",
-      "查詞已可使用；完整資料正在背景下載",
-      "例句、方言點、同反義詞、分類與官方發音的播放資料尚在下載，可先開始使用。",
+      "查詞已可使用；正在開啟完整資料",
+      "會優先讀取本機內容；若尚未保存，才會在背景下載例句、同反義詞與官方發音資料。",
       0,
     );
     state.learning = initializeLearning({
@@ -681,7 +670,7 @@ async function initializeCore() {
     return true;
   } catch (error) {
     console.error(error);
-    await deleteStoredData(CORE_DATA_URL);
+    await deleteStoredData(CORE_DATA_URL, dataCacheOptions());
     state.detailsStatus = "core-error";
     elements.form.setAttribute("aria-busy", "false");
     setStatus("詞庫載入失敗。若目前離線，請先連網開啟一次後再試。", "error");
@@ -698,7 +687,7 @@ async function loadDictionaryDetails() {
   if (!state.dictionary || ["loading", "indexing"].includes(state.detailsStatus)) return;
   if (state.pendingCoreBytes) {
     const coreBytes = state.pendingCoreBytes;
-    state.coreStorePromise = storeDataBytes(CORE_DATA_URL, coreBytes).then((stored) => {
+    state.coreStorePromise = storeDataBytes(CORE_DATA_URL, coreBytes, dataCacheOptions()).then((stored) => {
       state.coreStored = stored;
       state.pendingCoreBytes = stored ? null : coreBytes;
       return stored;
@@ -708,37 +697,46 @@ async function loadDictionaryDetails() {
   const expectedBytes = Number(state.dictionary.metadata?.web_data?.details_bytes) || 0;
   setTextDataStatus(
     "loading",
-    "查詞已可使用；完整資料正在背景下載",
-    "例句等完整內容即將開始下載，可先開始使用。",
+    "查詞已可使用；正在開啟完整資料",
+    "會先檢查這台裝置已保存的內容；查詞可繼續使用。",
     0,
   );
   try {
-    const result = await fetchJsonWithProgress(
-      DETAILS_DATA_URL,
+    const result = await loadValidatedJson({
+      canonicalUrl: DETAILS_DATA_URL,
+      primaryUrl: DETAILS_PRIMARY_URL,
+      ...dataCacheOptions(),
       expectedBytes,
-      (loaded, total) => {
+      validate: (details) => {
+        validateDictionaryDetails(state.dictionary, details);
+        return details;
+      },
+      onProgress: (loaded, total, { source }) => {
         const percent = total ? Math.min(99, Math.round((loaded / total) * 100)) : null;
         const bytes = total
           ? `${formatDataBytes(Math.min(loaded, total))} / ${formatDataBytes(total)}`
           : `${formatDataBytes(loaded)} 已接收`;
+        const fromCache = source === "cache";
         setTextDataStatus(
           "loading",
-          `查詞已可使用；完整資料正在背景下載${percent === null ? "" : `：${percent}%`}`,
-          `正在接收例句等完整內容（${bytes}），可先開始使用。`,
+          fromCache
+            ? "查詞已可使用；正在從本機開啟完整資料"
+            : `查詞已可使用；完整資料正在背景下載${percent === null ? "" : `：${percent}%`}`,
+          fromCache
+            ? "已找到保存的完整詞庫，正在建立全文搜尋。"
+            : `正在接收例句等完整內容（${bytes}），可先開始使用。`,
           percent,
         );
       },
-    );
-    mergeDictionaryDetails(state.dictionary, result.data);
-    const detailsStorePromise = storeDataBytes(DETAILS_DATA_URL, result.bytes).then((stored) => {
-      state.detailsPayloadStored = stored;
-      state.pendingDetailsBytes = stored ? null : result.bytes;
-      return stored;
     });
+    mergeDictionaryDetails(state.dictionary, result.value);
+    state.detailsPayloadStored = result.stored;
+    state.pendingDetailsBytes = result.stored ? null : result.bytes;
+    const detailsStorePromise = Promise.resolve(result.stored);
     state.detailsStatus = "indexing";
     setTextDataStatus(
       "loading",
-      "完整資料下載完成；正在建立全文索引",
+      "完整資料已開啟；正在建立全文索引",
       "查詞仍可使用，完成後即可搜尋例句與同反義詞。",
       100,
     );
@@ -752,6 +750,7 @@ async function loadDictionaryDetails() {
     state.detailsStatus = "ready";
     if (state.detailsStored) {
       renderStoredTextDataStatus();
+      void ensurePersistentDataStorage();
     } else {
       setTextDataStatus(
         "error",
@@ -764,7 +763,7 @@ async function loadDictionaryDetails() {
     }
   } catch (error) {
     console.error(error);
-    await deleteStoredData(DETAILS_DATA_URL);
+    await deleteStoredData(DETAILS_DATA_URL, dataCacheOptions());
     state.detailsStatus = "error";
     setTextDataStatus(
       "error",
@@ -781,10 +780,10 @@ async function retryTextDataStorage() {
     "不會重新建立詞庫，完成前仍可繼續使用。",
   );
   const coreStore = state.pendingCoreBytes
-    ? storeDataBytes(CORE_DATA_URL, state.pendingCoreBytes)
+    ? storeDataBytes(CORE_DATA_URL, state.pendingCoreBytes, dataCacheOptions())
     : Promise.resolve(state.coreStored);
   const detailsStore = state.pendingDetailsBytes
-    ? storeDataBytes(DETAILS_DATA_URL, state.pendingDetailsBytes)
+    ? storeDataBytes(DETAILS_DATA_URL, state.pendingDetailsBytes, dataCacheOptions())
     : Promise.resolve(state.detailsPayloadStored);
   const [coreStored, detailsStored] = await Promise.all([coreStore, detailsStore]);
   state.coreStored = coreStored;
@@ -794,6 +793,7 @@ async function retryTextDataStorage() {
   state.detailsStored = Boolean(coreStored && detailsStored);
   if (state.detailsStored) {
     renderStoredTextDataStatus();
+    void ensurePersistentDataStorage();
   } else {
     setTextDataStatus(
       "error",
@@ -878,6 +878,7 @@ window.addEventListener("beforeinstallprompt", (event) => {
   elements.installApp.textContent = "安裝 App";
 });
 elements.installApp.addEventListener("click", async () => {
+  void ensurePersistentDataStorage();
   if (!state.deferredInstallPrompt) {
     showInstallInstructions();
     return;
@@ -889,6 +890,7 @@ elements.installApp.addEventListener("click", async () => {
 window.addEventListener("appinstalled", () => {
   state.deferredInstallPrompt = null;
   elements.installApp.hidden = true;
+  void ensurePersistentDataStorage();
   elements.offlineStatus.textContent = "App 已安裝；文字詞庫離線狀態請見上方，學習語音可依腔調下載。";
 });
 

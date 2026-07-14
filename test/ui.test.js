@@ -33,29 +33,45 @@ test("mobile-first page exposes search, six-accent filter, learning routes, and 
   assert.match(css, /\.quiz-options\s*\{[\s\S]*grid-template-columns: 1fr/);
 });
 
-test("all frontend module and PWA edges use release 3", async () => {
+test("the v4 app shell keeps the unchanged v3 dictionary identity", async () => {
   const html = await source("index.html");
-  assert.match(html, /manifest\.webmanifest\?v=3/);
-  assert.match(html, /styles\.css\?v=3/);
-  assert.match(html, /app\.js\?v=3/);
+  assert.match(html, /manifest\.webmanifest\?v=4/);
+  assert.match(html, /styles\.css\?v=4/);
+  assert.match(html, /app\.js\?v=4/);
   const app = await source("app.js");
-  for (const edge of ["search.js?v=3", "quiz.js?v=3", "learning.js?v=3", "offline.js?v=3", "dictionary-data.js?v=3", "dictionary-core.json?v=3", "dictionary-details.json?v=3", "sw.js?v=3"]) {
+  for (const edge of ["search.js?v=4", "quiz.js?v=4", "learning.js?v=4", "offline.js?v=4", "dictionary-data.js?v=4", "data-loader.js?v=4", "sw.js?v=4"]) {
+    assert.ok(app.includes(edge), edge);
+  }
+  for (const edge of ["dictionary-core.json?v=3", "dictionary-details.json?v=3", "mandarin-hakka-data-v3"]) {
     assert.ok(app.includes(edge), edge);
   }
   const learning = await source("learning.js");
-  assert.ok(learning.includes("quiz.js?v=3"));
+  assert.ok(learning.includes("quiz.js?v=4"));
   const worker = await source("sw.js");
-  const releaseEdges = [...`${html}\n${app}\n${learning}\n${worker}`.matchAll(/\?v=(\d+)/g)];
-  assert.ok(releaseEdges.length > 0);
-  assert.deepEqual([...new Set(releaseEdges.map((match) => match[1]))], ["3"]);
+  assert.match(worker, /const RELEASE_REVISION = "4"/);
+  assert.match(worker, /const DATA_CACHE = "mandarin-hakka-data-v3"/);
 });
 
 test("core enables the app before details continue in the background", async () => {
   const app = await source("app.js");
   assert.match(app, /initializeCore\(\)\.then\(\(ready\) => \{\s*registerServiceWorker\(\);\s*if \(ready\) loadDictionaryDetails\(\);/);
   assert.match(app, /elements\.input\.disabled = false;[\s\S]*state\.detailsStatus = "pending"/);
-  assert.match(app, /mergeDictionaryDetails\(state\.dictionary, result\.data\);[\s\S]*storeDataBytes\(DETAILS_DATA_URL, result\.bytes\)/);
+  assert.match(app, /loadValidatedJson\(\{[\s\S]*canonicalUrl: DETAILS_DATA_URL[\s\S]*validateDictionaryDetails/);
+  assert.match(app, /mergeDictionaryDetails\(state\.dictionary, result\.value\)/);
   assert.match(app, /if \(state\.activeQuery\) \{\s*runSearch\(\{ updateHash: false, resetLimit: false, focusResults: false \}\);/);
+});
+
+test("dictionary startup is local-first, CDN-backed, and asks for durable storage", async () => {
+  const app = await source("app.js");
+  assert.match(app, /cdn\.jsdelivr\.net\/gh\/yazelin\/mandarin-hakka@f953fbd518aaecf64ebda0d63b4be1b2a22ad813/);
+  assert.match(app, /canonicalUrl: CORE_DATA_URL,[\s\S]*primaryUrl: CORE_PRIMARY_URL/);
+  assert.match(app, /result\.source === "cache"[\s\S]*已從本機開啟/);
+  assert.match(app, /已由高速節點下載並保存/);
+  assert.match(app, /requestPersistentStorage\(\)/);
+  assert.match(app, /void ensurePersistentDataStorage\(\)/);
+  const html = await source("index.html");
+  assert.match(html, /本機沒有時才從網路下載/);
+  assert.match(html, /不會因介面更新而重複下載/);
 });
 
 test("text download state stays global, accessible, honest, and retryable", async () => {
@@ -70,7 +86,7 @@ test("text download state stays global, accessible, honest, and retryable", asyn
   assert.match(app, /Math\.floor\(progress \/ 10\) \* 10/);
   assert.match(app, /pendingCoreBytes/);
   assert.match(app, /retryTextDataStorage\(\)/);
-  assert.match(app, /state\.pendingCoreBytes[\s\S]*storeDataBytes\(CORE_DATA_URL, state\.pendingCoreBytes\)/);
+  assert.match(app, /state\.pendingCoreBytes[\s\S]*storeDataBytes\(CORE_DATA_URL, state\.pendingCoreBytes, dataCacheOptions\(\)\)/);
   assert.match(app, /完整文字詞庫已儲存/);
   assert.doesNotMatch(app, /完整詞庫已儲存在這台裝置/);
 });

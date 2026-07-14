@@ -1,8 +1,9 @@
 const CACHE_PREFIX = "mandarin-hakka-";
-const RELEASE_REVISION = "3";
+const RELEASE_REVISION = "4";
 // Bump the shell cache and every release query together.
-const SHELL_CACHE = "mandarin-hakka-shell-v3";
-// Text payloads enter this cache only after the page validates their shared revision.
+const SHELL_CACHE = "mandarin-hakka-shell-v4";
+// This cache follows the dictionary revision, not the shell revision. UI-only
+// releases must preserve already-validated text instead of downloading it again.
 const DATA_CACHE = "mandarin-hakka-data-v3";
 // Audio is kept across shell updates until its source format actually changes.
 const AUDIO_CACHE = "mandarin-hakka-audio-v1";
@@ -18,14 +19,15 @@ const AUDIO_DOWNLOAD_CONCURRENCY = 4;
 const SHELL_FILES = [
   "./",
   "./index.html",
-  "./styles.css?v=3",
-  "./app.js?v=3",
-  "./search.js?v=3",
-  "./quiz.js?v=3",
-  "./learning.js?v=3",
-  "./offline.js?v=3",
-  "./dictionary-data.js?v=3",
-  "./manifest.webmanifest?v=3",
+  "./styles.css?v=4",
+  "./app.js?v=4",
+  "./search.js?v=4",
+  "./quiz.js?v=4",
+  "./learning.js?v=4",
+  "./offline.js?v=4",
+  "./dictionary-data.js?v=4",
+  "./data-loader.js?v=4",
+  "./manifest.webmanifest?v=4",
   "./assets/icon.svg",
   "./assets/icon-192.png",
   "./assets/icon-512.png",
