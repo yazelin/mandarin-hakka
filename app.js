@@ -3,14 +3,14 @@ import {
   listAccents,
   pickSuggestionTerms,
   searchEntriesDetailed,
-} from "./search.js?v=1";
-import { buildQuizPool } from "./quiz.js?v=1";
-import { initializeLearning } from "./learning.js?v=1";
-import { canDownloadAccentPack, classifyServiceWorkerReply } from "./offline.js?v=1";
+} from "./search.js?v=2";
+import { buildQuizPool } from "./quiz.js?v=2";
+import { initializeLearning } from "./learning.js?v=2";
+import { canDownloadAccentPack, classifyServiceWorkerReply } from "./offline.js?v=2";
 
-const DATA_URL = "./data/dictionary.json?v=1";
+const DATA_URL = "./data/dictionary.json?v=2";
 const DATA_BASE_URL = new URL(DATA_URL, window.location.href);
-const RELEASE_REVISION = "1";
+const RELEASE_REVISION = "2";
 const AUDIO_CACHE = "mandarin-hakka-audio-v1";
 const LEARNING_AUDIO_LIMIT = 500;
 const SOURCE_URL = "https://hakkadict.moe.edu.tw/";
@@ -466,7 +466,7 @@ async function registerServiceWorker() {
     return;
   }
   try {
-    const registration = await navigator.serviceWorker.register("./sw.js?v=1", { scope: "./" });
+    const registration = await navigator.serviceWorker.register("./sw.js?v=2", { scope: "./" });
     state.serviceWorkerRegistration = registration;
     registration.addEventListener("updatefound", () => {
       registration.installing?.addEventListener("statechange", () => checkServiceWorkerCompatibility(registration));
@@ -617,5 +617,4 @@ window.addEventListener("appinstalled", () => {
   elements.offlineStatus.textContent = "App 已安裝；文字詞庫可離線，學習語音可依腔調下載。";
 });
 
-registerServiceWorker();
-initialize();
+initialize().finally(registerServiceWorker);

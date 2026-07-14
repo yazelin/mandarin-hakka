@@ -33,15 +33,27 @@ test("mobile-first page exposes search, six-accent filter, learning routes, and 
   assert.match(css, /\.quiz-options\s*\{[\s\S]*grid-template-columns: 1fr/);
 });
 
-test("all frontend module and PWA edges use release 1", async () => {
+test("all frontend module and PWA edges use release 2", async () => {
   const html = await source("index.html");
-  assert.match(html, /manifest\.webmanifest\?v=1/);
-  assert.match(html, /styles\.css\?v=1/);
-  assert.match(html, /app\.js\?v=1/);
+  assert.match(html, /manifest\.webmanifest\?v=2/);
+  assert.match(html, /styles\.css\?v=2/);
+  assert.match(html, /app\.js\?v=2/);
   const app = await source("app.js");
-  for (const edge of ["search.js?v=1", "quiz.js?v=1", "learning.js?v=1", "dictionary.json?v=1", "sw.js?v=1"]) {
+  for (const edge of ["search.js?v=2", "quiz.js?v=2", "learning.js?v=2", "offline.js?v=2", "dictionary.json?v=2", "sw.js?v=2"]) {
     assert.ok(app.includes(edge), edge);
   }
+  const learning = await source("learning.js");
+  assert.ok(learning.includes("quiz.js?v=2"));
+  const worker = await source("sw.js");
+  const releaseEdges = [...`${html}\n${app}\n${learning}\n${worker}`.matchAll(/\?v=(\d+)/g)];
+  assert.ok(releaseEdges.length > 0);
+  assert.deepEqual([...new Set(releaseEdges.map((match) => match[1]))], ["2"]);
+});
+
+test("first load finishes dictionary initialization before registering the service worker", async () => {
+  const app = await source("app.js");
+  assert.match(app, /initialize\(\)\.finally\(registerServiceWorker\);/);
+  assert.doesNotMatch(app, /registerServiceWorker\(\);\s*initialize\(\);/);
 });
 
 test("learning data and share assets use the Hakka namespace", async () => {

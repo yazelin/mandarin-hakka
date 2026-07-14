@@ -1,7 +1,7 @@
 const CACHE_PREFIX = "mandarin-hakka-";
-const RELEASE_REVISION = "1";
+const RELEASE_REVISION = "2";
 // Bump the shell cache and every release query together.
-const SHELL_CACHE = "mandarin-hakka-shell-v1";
+const SHELL_CACHE = "mandarin-hakka-shell-v2";
 // Audio is kept across shell updates until its source format actually changes.
 const AUDIO_CACHE = "mandarin-hakka-audio-v1";
 const OFFICIAL_AUDIO_ORIGIN = "https://hakkadict.moe.edu.tw";
@@ -16,19 +16,19 @@ const AUDIO_DOWNLOAD_CONCURRENCY = 4;
 const SHELL_FILES = [
   "./",
   "./index.html",
-  "./styles.css?v=1",
-  "./app.js?v=1",
-  "./search.js?v=1",
-  "./quiz.js?v=1",
-  "./learning.js?v=1",
-  "./offline.js?v=1",
-  "./manifest.webmanifest?v=1",
+  "./styles.css?v=2",
+  "./app.js?v=2",
+  "./search.js?v=2",
+  "./quiz.js?v=2",
+  "./learning.js?v=2",
+  "./offline.js?v=2",
+  "./manifest.webmanifest?v=2",
   "./assets/icon.svg",
   "./assets/icon-192.png",
   "./assets/icon-512.png",
   "./assets/icon-maskable-512.png",
   "./assets/apple-touch-icon.png",
-  "./data/dictionary.json?v=1",
+  "./data/dictionary.json?v=2",
 ];
 
 const SCOPE_URL = new URL(self.registration.scope);

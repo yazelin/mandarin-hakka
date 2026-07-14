@@ -5,7 +5,7 @@ import {
   currentWrongCandidates,
   isMastered,
   nextLearningProgress,
-} from "./quiz.js?v=1";
+} from "./quiz.js?v=2";
 
 const STORE_KEY = "mandarin-hakka-learning-v1";
 const STORE_VERSION = 1;
