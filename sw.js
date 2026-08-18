@@ -1,7 +1,7 @@
 const CACHE_PREFIX = "mandarin-hakka-";
 const RELEASE_REVISION = "5";
 // Bump the shell cache and every release query together.
-const SHELL_CACHE = "mandarin-hakka-shell-v14";
+const SHELL_CACHE = "mandarin-hakka-shell-v15";
 // This cache follows the dictionary revision, not the shell revision. UI-only
 // releases must preserve already-validated text instead of downloading it again.
 const DATA_CACHE = "mandarin-hakka-data-v3";
