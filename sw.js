@@ -1,7 +1,7 @@
 const CACHE_PREFIX = "mandarin-hakka-";
 const RELEASE_REVISION = "5";
 // Bump the shell cache and every release query together.
-const SHELL_CACHE = "mandarin-hakka-shell-v15";
+const SHELL_CACHE = "mandarin-hakka-shell-v16";
 // This cache follows the dictionary revision, not the shell revision. UI-only
 // releases must preserve already-validated text instead of downloading it again.
 const DATA_CACHE = "mandarin-hakka-data-v3";
@@ -360,7 +360,10 @@ self.addEventListener("message", (event) => {
 async function matchBestEffort(cacheName, request) {
   try {
     const cache = await caches.open(cacheName);
-    return await cache.match(request);
+    // ignoreVary is harmless here and guards against GitHub Pages' Vary:
+    // Accept-Encoding; ignoreSearch lets cache-first shell/data lookups hit
+    // regardless of ?v= release query, so a stale ?v= request still resolves.
+    return await cache.match(request, { ignoreSearch: true, ignoreVary: true });
   } catch {
     return undefined;
   }

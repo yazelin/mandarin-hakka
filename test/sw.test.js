@@ -8,7 +8,7 @@ import vm from "node:vm";
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const workerSource = readFileSync(resolve(repositoryRoot, "sw.js"), "utf8");
 const scope = "https://example.test/mandarin-hakka/";
-const shellCache = "mandarin-hakka-shell-v4";
+const shellCache = "mandarin-hakka-shell-v16";
 const dataCache = "mandarin-hakka-data-v3";
 const audioCache = "mandarin-hakka-audio-v1";
 const officialAudio = "https://hakkadict.moe.edu.tw/static/audio/hk0000014108-1-1.mp3";
@@ -241,7 +241,7 @@ test("install caches only the v4 app shell and never downloads dictionary payloa
     worker.fetchCalls.some(([request]) => /\/data\/dictionary-(?:core|details)\.json/.test(request.url)),
     false,
   );
-  assert.ok(worker.cached(shellCache, `${scope}app.js?v=4`));
+  assert.ok(worker.cached(shellCache, `${scope}app.js?v=5`));
 });
 
 test("official opaque audio is cached after playback and served offline", async () => {
@@ -451,7 +451,7 @@ test("an in-progress learning-pack download can be cancelled without a false com
 test("clear message removes only the Hakka audio cache", async () => {
   const worker = createWorker(async () => new Response("unused"));
   worker.seed(audioCache, `${scope}assets/hakka-audio/dapu/a.mp3`, "audio");
-  worker.seed(shellCache, `${scope}app.js?v=4`, "app");
+  worker.seed(shellCache, `${scope}app.js?v=5`, "app");
 
   const replies = await worker.dispatchMessage({ type: "CLEAR_HAKKA_AUDIO" }, { usePort: true });
   assert.equal(replies.at(-1).type, "HAKKA_AUDIO_CLEARED");
@@ -470,7 +470,7 @@ test("activation removes only obsolete mandarin-hakka caches", async () => {
   const worker = createWorker(async () => new Response("unused"));
   worker.seed("mandarin-hakka-shell-v0", `${scope}old.js`, "old");
   worker.seed("mandarin-hakka-shell-v3", `${scope}app.js?v=3`, "previous shell");
-  worker.seed(shellCache, `${scope}app.js?v=4`, "current");
+  worker.seed(shellCache, `${scope}app.js?v=5`, "current");
   worker.seed(dataCache, `${scope}data/dictionary-core.json?v=3`, "current data");
   worker.seed("mandarin-hakka-audio-v0", officialAudio, new OpaqueResponse());
   worker.seed(audioCache, `${scope}assets/hakka-audio/zhaoan/a.mp3`, "current audio");
@@ -488,7 +488,7 @@ test("activation removes only obsolete mandarin-hakka caches", async () => {
 test("worker reports the v4 shell release and stable v3 data cache without eager takeover", async () => {
   const worker = createWorker(async () => new Response("unused"));
   const replies = await worker.dispatchMessage({ type: "GET_RELEASE" }, { usePort: true });
-  assert.deepEqual(JSON.parse(JSON.stringify(replies)), [{ release: "4", audioCache, dataCache }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(replies)), [{ release: "5", audioCache, dataCache }]);
   assert.doesNotMatch(workerSource, /skipWaiting\s*\(/);
   assert.doesNotMatch(workerSource, /location\.reload\s*\(/);
 });
@@ -503,7 +503,7 @@ test("all v4 modules but no dictionary payloads are install-shell members", () =
     "dictionary-data.js",
     "data-loader.js",
   ]) {
-    assert.match(workerSource, new RegExp(`"\\.\\/${path.replaceAll(".", "\\.")}\\?v=4"`), path);
+    assert.match(workerSource, new RegExp(`"\\.\\/${path.replaceAll(".", "\\.")}\\?v=5"`), path);
   }
   assert.doesNotMatch(workerSource, /"\.\/data\/dictionary-(?:core|details)\.json/);
 });
