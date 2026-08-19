@@ -35,9 +35,9 @@ test("mobile-first page exposes search, six-accent filter, learning routes, and 
 
 test("the v4 app shell keeps the unchanged v3 dictionary identity", async () => {
   const html = await source("index.html");
-  assert.match(html, /manifest\.webmanifest\?v=4/);
-  assert.match(html, /styles\.css\?v=4/);
-  assert.match(html, /app\.js\?v=4/);
+  assert.match(html, /manifest\.webmanifest\?v=5/);
+  assert.match(html, /styles\.css\?v=5/);
+  assert.match(html, /app\.js\?v=5/);
   const app = await source("app.js");
   for (const edge of ["search.js?v=4", "quiz.js?v=4", "learning.js?v=4", "offline.js?v=4", "dictionary-data.js?v=4", "data-loader.js?v=4", "sw.js?v=4"]) {
     assert.ok(app.includes(edge), edge);
@@ -48,7 +48,7 @@ test("the v4 app shell keeps the unchanged v3 dictionary identity", async () => 
   const learning = await source("learning.js");
   assert.ok(learning.includes("quiz.js?v=4"));
   const worker = await source("sw.js");
-  assert.match(worker, /const RELEASE_REVISION = "4"/);
+  assert.match(worker, /const RELEASE_REVISION = "5"/);
   assert.match(worker, /const DATA_CACHE = "mandarin-hakka-data-v3"/);
 });
 
